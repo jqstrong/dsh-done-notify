@@ -387,6 +387,17 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * Session of the newest system notice raised while the window was away.
+		 * When the window comes back (either because the user clicked the toast and
+		 * the shell activated the window, or because they returned by hand) and
+		 * the click event did not arrive, this lets the app still land on the
+		 * Session the notification was about.
+		 */
+		let pendingReturn = null;
+		/** A pending return older than this is considered stale. */
+		const PENDING_RETURN_TTL_MS = 3 * 60 * 1000;
+
+		/**
 		 * Live OS notices stay referenced: a garbage-collected Notification loses
 		 * its click handler in Electron, so a click would never open the Session.
 		 */
@@ -407,6 +418,24 @@ window.__ModuleLoader__.load({
 		/** Drop one retained notice reference (it stays in the OS notification center). */
 		function releaseNotice(tag) {
 			liveNotices.delete(tag);
+		}
+
+		/** Waiting-choice notices by Session, closed again once the choice is answered. */
+		const questionNotices = new Map();
+
+		/** Close a retained notice on purpose and forget its reference. */
+		function closeRetainedNotice(notice) {
+			for (const [tag, held] of liveNotices) {
+				if (held !== notice) continue;
+				liveNotices.delete(tag);
+				break;
+			}
+			try {
+				notice.close();
+			}
+			catch (_error) {
+				/* The notice is already gone. */
+			}
 		}
 
 		/* ------------------------------------------------------- settings bridge */
@@ -651,34 +680,56 @@ window.__ModuleLoader__.load({
 					const tag = kind === 'test'
 						? 'dsh-dn-test'
 						: notificationTag(kind === 'question' ? `${sessionId}:question` : sessionId);
+					const inactive = isWindowInactive();
 					const notice = new Ctor(title, {
 						body,
 						tag,
 						/* Replacing an existing notice should alert again: every event matters. */
 						renotify: true,
 						silent: false,
+						/*
+						 * While the window is away (and for a pending choice), keep the
+						 * banner on screen until the user acts on it: clicking the banner
+						 * reaches the click handler, while a click on the Action Center
+						 * entry is unreliable in Electron (electron/electron#29461).
+						 */
+						requireInteraction: inactive || kind === 'question',
 					});
 					/* Keep the object alive: a collected Notification drops its click handler. */
 					retainNotice(tag, notice);
+					if (kind === 'question') questionNotices.set(sessionId, notice);
+					if (inactive && kind !== 'test' && typeof sessionId === 'string') {
+						pendingReturn = { sessionId, at: Date.now() };
+					}
 					notice.onclick = () => {
 						releaseNotice(tag);
+						if (kind === 'question') questionNotices.delete(sessionId);
+						pendingReturn = null;
+						const focusWindow = () => {
+							try {
+								window.focus();
+							}
+							catch (_error) {
+								/* Focus can be refused by the shell; opening still works. */
+							}
+						};
+						openSession(sessionId);
+						focusWindow();
+						/* One delayed retry helps shells that raise the window a tick late. */
 						try {
-							window.focus();
+							window.setTimeout(focusWindow, 60);
 						}
 						catch (_error) {
-							/* Focus can be refused by the shell; opening still works. */
+							/* Timers are best-effort here. */
 						}
-						openSession(sessionId);
-					};
-					notice.onclose = () => {
-						releaseNotice(tag);
 					};
 					notice.onerror = () => {
 						releaseNotice(tag);
+						if (kind === 'question') questionNotices.delete(sessionId);
 					};
-					/* No manual close: the OS keeps the notice in the notification
-					 * center until the user dismisses it, so a missed banner is
-					 * still discoverable later. */
+					/* Deliberately no `onclose` release: Electron fires `close` when the
+					 * toast moves into the Action Center, where it may still be clicked;
+					 * dropping the only reference would let GC remove the click handler. */
 				}
 				catch (_error) {
 					/* System notices are best-effort; the in-app toast remains. */
@@ -802,6 +853,19 @@ window.__ModuleLoader__.load({
 						}
 					}
 					previousPending.current = next;
+					/* A choice that got answered closes its waiting notice and card. */
+					for (const sessionId of previous.keys()) {
+						if (next.get(sessionId) !== undefined) continue;
+						const notice = questionNotices.get(sessionId);
+						if (notice !== undefined) {
+							questionNotices.delete(sessionId);
+							closeRetainedNotice(notice);
+						}
+						setToasts((current) => {
+							const kept = current.filter((toast) => toast.sessionId !== sessionId || toast.kind !== 'question');
+							return kept.length === current.length ? current : kept;
+						});
+					}
 					if (waiting.length === 0) return;
 					const list = sessionsRef.current;
 					for (const sessionId of waiting) {
@@ -841,6 +905,11 @@ window.__ModuleLoader__.load({
 				React.useEffect(() => {
 					const wake = () => {
 						if (isWindowInactive()) return;
+						if (pendingReturn !== null) {
+							const target = pendingReturn;
+							pendingReturn = null;
+							if (Date.now() - target.at < PENDING_RETURN_TTL_MS) openSession(target.sessionId);
+						}
 						for (const toast of toastsRef.current) {
 							const timer = timers.current.get(toast.key);
 							if (timer !== undefined) window.clearTimeout(timer);
@@ -860,7 +929,17 @@ window.__ModuleLoader__.load({
 				React.useEffect(() => () => {
 					for (const timer of timers.current.values()) window.clearTimeout(timer);
 					timers.current.clear();
+					for (const notice of questionNotices.values()) {
+						try {
+							notice.close();
+						}
+						catch (_error) {
+							/* Already gone. */
+						}
+					}
+					questionNotices.clear();
 					liveNotices.clear();
+					pendingReturn = null;
 				}, []);
 
 				if (toasts.length === 0) return null;

@@ -628,6 +628,7 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'OS notice is raised even while the window is focused');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 对话已完成');
 	assertWebNotice(FakeNotification.instances[0], 'completion notice');
+	assert.equal(FakeNotification.instances[0].options.requireInteraction, false, 'focused window keeps the normal auto-hide banner');
 	assert.equal(assistant.tree.props['aria-live'], 'polite');
 	/* A missed banner must stay discoverable in the notification center. */
 	advance(60000);
@@ -708,6 +709,7 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'OS notice raised while away');
 	const notice = FakeNotification.instances[0];
 	assert.equal(notice.title, 'DSH · 对话已完成');
+	assert.equal(notice.options.requireInteraction, true, 'away window keeps the clickable banner on screen');
 	assert.ok(notice.options.body.includes('s-main'.slice(-6)), 'OS notice names the session');
 	notice.onclick();
 	assert.deepEqual(openSessions, ['s-main'], 'OS notice click opens the Session');
@@ -853,14 +855,19 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'desktop notice for the waiting choice');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 需要你的选择');
 	assertWebNotice(FakeNotification.instances[0], 'choice notice');
+	assert.equal(FakeNotification.instances[0].options.requireInteraction, true, 'a pending choice keeps its banner visible');
 
 	/* The same interaction object across status republishes must not duplicate. */
 	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: firstChoice })]);
 	assistant.render();
 	assert.equal(FakeNotification.instances.length, 1, 'same pending choice is not re-announced');
 
-	/* A resolved choice followed by a new one announces again. */
+	/* A resolved choice closes its own waiting notice. */
 	publishStatus(assistant, [sessionRow('s-ask', { running: true })]);
+	assistant.render();
+	assert.equal(FakeNotification.instances[0].closed, true, 'resolved choice closes its system notice');
+
+	/* A new choice after resolution announces again. */
 	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: { kind: 'ask', n: 2 } })]);
 	assistant.render();
 	assert.equal(FakeNotification.instances.length, 2, 'a new pending choice is announced');
@@ -911,9 +918,26 @@ publishConfig({});
 	const notice = FakeNotification.instances[0];
 	advance(120000);
 	openSessions.length = 0;
+	/* A close event merely moving the toast into the Action Center must not
+	 * invalidate the retained click handler. */
+	if (typeof notice.onclose === 'function') notice.onclose();
 	notice.onclick();
 	assert.deepEqual(openSessions, ['s-note'], 'notification click opens the Session');
 	assert.equal(windowStub.focused, 1, 'notification click focuses the window');
+}
+
+/* 9e. Returning to the window after an away notice opens the notified Session. */
+{
+	resetWorld();
+	const assistant = createNotifierInstance();
+	publishStatus(assistant, [sessionRow('s-return', { running: true })]);
+	setWindowState({ hidden: true, focused: false });
+	publishStatus(assistant, [sessionRow('s-return')]);
+	assistant.render();
+	assert.equal(openSessions.length, 0, 'nothing is opened while away');
+	setWindowState({ hidden: false, focused: true });
+	for (const entry of documentListeners.filter((item) => item.type === 'visibilitychange')) entry.listener();
+	assert.deepEqual(openSessions, ['s-return'], 'returning to the window opens the notified Session');
 }
 
 /* 13. Serving the namespace makes the page ready and shows the values. */

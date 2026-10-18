@@ -5,9 +5,10 @@
 DSH 插件（bundle）：会话跑完、或需要你做选择时给出提示，解决「跑完了却不知道」「卡在等选择」的问题；**设置 → 运行通知** 里可以选择用哪种方式提醒。
 
 - **页面内提示卡片**：DSH 窗口右下角弹出卡片，带会话 id 尾号；点击打开该会话，悬停暂停消失，到时自动收起。
-- **桌面系统通知**：Windows 桌面右下角的系统通知（Web Notification），点击打开会话并尝试聚焦窗口；通知会留在通知中心，直到手动清除。
+- **桌面系统通知**：Windows 桌面右下角的系统通知（Web Notification），点击打开会话并尝试聚焦窗口；窗口不在前台时通知横幅会保持显示，等你处理；通知也会留在通知中心，直到手动清除。
 - 两种通道**可以分别在设置里开关**（都开、只开其一、都关都可以）。
-- **需要你选择时提醒**：会话在等待选择 / 确认 / 审批时也会提醒（可单独关闭）。
+- **需要你选择时提醒**：会话在等待选择 / 确认 / 审批时也会提醒（可单独关闭）；回答后对应的「等待选择」通知会自动关闭。
+- 窗口不在前台时收到通知、之后回到 DSH 时，会自动切到该通知对应的会话（3 分钟内有效）。
 - 设置项立即生效，保存在 DSH 配置档案里，重启后仍然有效。
 
 ## 功能
@@ -79,7 +80,7 @@ pnpm install          # 安装 Host Config 需要的 @deepseek-ai/schemastery
 - **数据源**：Client 端已有的会话状态源（`useSessionStatus` / `useSessions` 标准 props，由官方 `@deepseek-ai/dsh-client-ui-session` 提供），包含 `running` 与 `pendingInteraction`。不轮询、不订阅全量会话事件、不读 DOM。
 - **完成判定**：只关心 `running: true → false` 的跳变；用会话列表行区分主视图 / 子代理；焦点状态只影响「正在看的会话是否提示」和隐藏时卡片不提前消失。
 - **等待判定**：`pendingInteraction` 从无到有、或换成一个新的交互对象时提醒一次；同一个交互在状态重发时不会重复提醒。
-- **通道**：`notifyInApp` 与 `systemNotifications` 独立控制；系统通知点击会打开对应会话并调用 `window.focus()`，同时**保留 Notification 对象引用**——Electron 里被 GC 的 Notification 会丢失 click 回调（[electron/electron#29461](https://github.com/electron/electron/issues/29461)），这是此前点击无反应的根因。
+- **通道与点击**：`notifyInApp` 与 `systemNotifications` 独立控制；系统通知点击会打开对应会话、调用 `window.focus()` 并延迟重试。点击能否回调依赖 Notification 对象存活——Electron 里被 GC 的通知会丢失 click 处理器，而 `close` 事件会在通知移入 Windows 通知中心时触发，所以**不能在 `close` 里释放引用**。窗口不在前台时用 `requireInteraction` 让横幅保持到用户处理；另记录一个「待返回会话」，窗口重新获得焦点且 3 分钟内未点击时自动切过去。
 - **渲染位置**：卡片注册在 `shell.overlay`（全窗口浮动层，本身点击穿透，只有卡片接管鼠标事件）；设置页注册在 `settings.section`（设置导航页签）。
 - **配置**：Host `index.js` 导出 `Config`（6 个 `volatile` 字段），客户端通过 `ctx.configForms` 读取实时值并用 revision 保护写入；命名空间为 Loader 行 id `done-notify`，对嵌套（`include:` 前缀）命名空间做了回退解析。
 - **样式**：全部使用 `--dsw-alias-*` / `--dsw-focus-ring-*` 主题 token，跟随深浅色与字号设置；开关控件按官方样式重写，不导入任何 Harness Client 包，也不替换应用根节点。
@@ -114,23 +115,25 @@ node check.mjs      # 或 pnpm check
 - 1.0.1 修复：系统通知不再只在窗口失焦时发送，真实运行结束与测试按钮走同一条发送路径。
 - 1.0.3 修复：Electron 在 Windows 11 上会丢弃 `tag` 长度超过 34 字符的 Web Notification（[electron/electron#40433](https://github.com/electron/electron/issues/40433)），真实通知此前用约 60 字符的 tag 因此完全不显示；现改为会话 id 的 32 位哈希（`dsh-dn-xxxxxxxx`，14 字符）并开启 `renotify`。
 - 1.1.0 新增：通道分别开关、等待选择提醒、保留 Notification 引用修复点击回调（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。
+- 1.2.0 修复：`close` 事件可能在通知被移入 Windows 通知中心时触发，旧代码在 `close` 里释放引用，导致之后点击时对象已被回收、回调丢失；现在只在点击/出错/主动关闭时释放。窗口不在前台时使用 `requireInteraction` 让横幅保持可点击；回到 DSH 时自动切到通知对应的会话（3 分钟内）。
 
 未验证：
 
 - 视觉与交互观感（截图确认设置页排版、开关配色、toast 位置）。
-- 点击系统通知后窗口是否能被系统/桌面壳拉到前台：代码已打开会话并调用 `window.focus()`、且保留通知引用确保点击回调执行；Windows 的焦点抢占策略与桌面壳行为仍需实测。
+- 点击系统通知后窗口是否能被系统/桌面壳拉到前台：代码会打开对应会话、调用 `window.focus()` 并延迟重试，且保留了通知引用；但如果 DSH 窗口处于**最小化**状态，页面侧没有恢复窗口的 API（桌面壳未向插件暴露），可能只能把会话切换好、等你自己点任务栏恢复。Electron 的 Windows 通知中心（Action Center）点击回传也有已知缺陷（[electron/electron#29461](https://github.com/electron/electron/issues/29461)），所以窗口不在前台时通知横幅会用 `requireInteraction` 保持显示，优先点横幅。
 - macOS / Linux 与不同 DSH 版本；DSH 的 Client 内部 API 可能随版本演进，升级后建议重新跑 `node check.mjs`。
 
 ## 常见问题
 
 - **更新 / 重新安装后行为没变**：已打开的页面会继续运行启动时加载的客户端模块。刷新一次页面（`Ctrl+R`）或重启 DSH，才会换成新代码；开发时的文件改动（HMR）除外。
 - **没有收到系统通知**：先在「设置 → 运行通知」确认「桌面系统通知」开启、权限为「已授权」；再点「发送测试」确认通道；若测试也没有 Windows 弹窗，检查 Windows 通知中心（`Win+N`）与「专注助手 / 勿扰模式」设置。插件发出的通知不会自动清除，会留在通知中心。
-- **点击系统通知没有反应**：先确认运行的是 1.1.0+（设置页有「页面内提示卡片 / 桌面系统通知」两个开关）。1.1.0 修复了 Electron 中通知对象被回收导致 click 回调丢失的问题；点击会打开对应会话并尝试聚焦窗口。
+- **点击系统通知没有反应**：请确认运行的是 1.2.0+。1.2.0 修掉了「通知移入通知中心时释放引用，随后点击时对象已被回收」的问题，并在窗口不在前台时让横幅保持显示（`requireInteraction`），**优先点击横幅**而不是通知中心里的条目——Electron 在 Windows 通知中心的点击回传有已知缺陷（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。如果窗口是最小化状态且点了横幅仍不出现，受限于页面没有恢复窗口的 API，可能需要点任务栏图标；此时回到窗口会自动切到通知对应的会话。
 - **不想在看着会话时被打扰**：关闭「当前会话完成时也提示」——该会话在前台时不再提示，后台会话结束仍会通知；也可以直接关掉「页面内提示卡片」通道。
 
 ## Changelog
 
-- **1.1.0** — 新增「页面内提示卡片 / 桌面系统通知」两个通道可分别开关；新增「需要我选择时提醒」（`pendingInteraction` 检测）；修复系统通知点击无反应：保留 Notification 对象引用，避免 Electron 中 click 回调因对象回收而丢失（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。
+- **1.2.0** — 修复点击系统通知无反应：`close` 事件会在通知移入 Windows 通知中心时触发，旧代码据此释放引用，导致之后点击时 Notification 已被回收、click 回调丢失；现在只在点击/错误/主动关闭时释放，窗口不在前台时用 `requireInteraction` 让横幅保持可点击，并在回到 DSH 时自动切到通知对应会话（3 分钟内）。等待选择的系统通知在回答后自动关闭。
+- **1.1.0** — 新增「页面内提示卡片 / 桌面系统通知」两个通道可分别开关；新增「需要我选择时提醒」（`pendingInteraction` 检测）；首次尝试保留 Notification 引用以避免点击回调丢失（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。
 - **1.0.3** — 修复真实运行结束的系统通知不显示：通知 tag 超过 34 字符会被 Electron/Windows 11 丢弃（[electron/electron#40433](https://github.com/electron/electron/issues/40433)），改用会话 id 哈希出的短 tag 并开启 `renotify`。
 - **1.0.2** — 系统通知不再在 15 秒后主动关闭，错过横幅后仍可在 Windows 通知中心找到；README 补充升级后需刷新页面、通知排查等说明。
 - **1.0.1** — 系统通知改为每次运行结束都发送（不再只在窗口失焦时）；设置页排版、焦点样式、时长归一化与若干健壮性修复；补充 LICENSE、仓库元数据与 README。
