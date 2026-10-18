@@ -741,12 +741,13 @@ window.__ModuleLoader__.load({
 						renotify: true,
 						silent: false,
 						/*
-						 * While the window is away (and for a pending choice), keep the
-						 * banner on screen until the user acts on it: clicking the banner
-						 * reaches the click handler, while a click on the Action Center
-						 * entry is unreliable in Electron (electron/electron#29461).
+						 * No `requireInteraction`: on Windows it makes the toast a
+						 * persistent reminder, and the platform then adds its own
+						 * dismiss/close button to the notification body, which users
+						 * cannot tell apart from a plugin control. The banners
+						 * auto-hide like any normal Windows toast instead.
 						 */
-						requireInteraction: inactive || kind === 'question',
+						requireInteraction: false,
 					});
 					/* Keep the object alive: a collected Notification drops its click handler. */
 					retainNotice(tag, notice);

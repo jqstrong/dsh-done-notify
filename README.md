@@ -5,7 +5,7 @@
 DSH 插件（bundle）：会话跑完、或需要你做选择时给出提示，解决「跑完了却不知道」「卡在等选择」的问题；**设置 → 运行通知** 里可以选择用哪种方式提醒。
 
 - **页面内提示卡片**：DSH 窗口右下角弹出卡片，带会话 id 尾号；点击打开该会话（卡片没有关闭按钮，悬停暂停消失，到时自动收起）。
-- **桌面系统通知**：Windows 桌面右下角的系统通知（Web Notification），点击打开会话并尝试聚焦窗口；窗口不在前台时通知横幅会保持显示，等你处理；通知也会留在通知中心，直到手动清除。
+- **桌面系统通知**：Windows 桌面右下角的系统通知（Web Notification），点击打开会话并尝试聚焦窗口；通知会留在通知中心，直到手动清除。
 - 两种通道**可以分别在设置里开关**（都开、只开其一、都关都可以）。
 - **需要你选择时提醒**：会话在等待选择 / 确认 / 审批时也会提醒（可单独关闭）；回答后对应的「等待选择」通知会自动关闭。
 - 窗口不在前台时收到通知、之后回到 DSH 时，会自动切到该通知对应的会话（3 分钟内有效）。
@@ -80,7 +80,8 @@ pnpm install          # 安装 Host Config 需要的 @deepseek-ai/schemastery
 - **数据源**：Client 端已有的会话状态源（`useSessionStatus` / `useSessions` 标准 props，由官方 `@deepseek-ai/dsh-client-ui-session` 提供），包含 `running` 与 `pendingInteraction`。不轮询、不订阅全量会话事件、不读 DOM。
 - **完成判定**：只关心 `running: true → false` 的跳变；用会话列表行区分主视图 / 子代理；焦点状态只影响「正在看的会话是否提示」和隐藏时卡片不提前消失。
 - **等待判定**：`pendingInteraction` 从无到有、或换成一个新的交互对象时提醒一次；同一个交互在状态重发时不会重复提醒。
-- **通道与点击**：`notifyInApp` 与 `systemNotifications` 独立控制；系统通知点击会打开对应会话、调用 `window.focus()`、延迟重试，并在窗口仍未获得焦点时用隐藏 iframe 请求桌面壳的 `dsh://open` 协议（桌面壳会把后到的启动当作「聚焦主窗口」并恢复最小化）。点击能否回调依赖 Notification 对象存活——Electron 里被 GC 的通知会丢失 click 处理器，而 `close` 事件会在通知移入 Windows 通知中心时触发，所以**不能在 `close` 里释放引用**。窗口不在前台时用 `requireInteraction` 让横幅保持到用户处理；另记录一个「待返回会话」，窗口重新获得焦点且 3 分钟内未点击时自动切过去。设置页底部的诊断行记录最近系统通知与最近点击时间。
+- **通道与点击**：`notifyInApp` 与 `systemNotifications` 独立控制；系统通知点击会打开对应会话、调用 `window.focus()`、延迟重试，并在窗口仍未获得焦点时用隐藏 iframe 请求桌面壳的 `dsh://open` 协议（桌面壳会把后到的启动当作「聚焦主窗口」并恢复最小化）。点击能否回调依赖 Notification 对象存活——Electron 里被 GC 的通知会丢失 click 处理器，而 `close` 事件会在通知移入 Windows 通知中心时触发，所以**不能在 `close` 里释放引用**；另记录一个「待返回会话」，窗口重新获得焦点且 3 分钟内未点击时自动切过去。设置页底部的诊断行记录最近系统通知与最近点击时间。
+- **通知样式选择**：不设置 `requireInteraction`。Windows 会给 persistent（`requireInteraction`）通知额外加一个系统自带的「关闭」按钮，看起来像插件加的控件（[whatwg/notifications#236](https://github.com/whatwg/notifications/issues/236)），也不是我们需要的样式；所以通知和其它 Windows toast 一样自动隐藏并留在通知中心。
 - **渲染位置**：卡片注册在 `shell.overlay`（全窗口浮动层，本身点击穿透，只有卡片接管鼠标事件）；设置页注册在 `settings.section`（设置导航页签）。
 - **配置**：Host `index.js` 导出 `Config`（6 个 `volatile` 字段），客户端通过 `ctx.configForms` 读取实时值并用 revision 保护写入；命名空间为 Loader 行 id `done-notify`，对嵌套（`include:` 前缀）命名空间做了回退解析。
 - **样式**：全部使用 `--dsw-alias-*` / `--dsw-focus-ring-*` 主题 token，跟随深浅色与字号设置；开关控件按官方样式重写，不导入任何 Harness Client 包，也不替换应用根节点。
@@ -120,7 +121,7 @@ node check.mjs      # 或 pnpm check
 未验证：
 
 - 视觉与交互观感（截图确认设置页排版、开关配色、toast 位置）。
-- 点击系统通知后窗口是否能被系统/桌面壳拉到前台：1.3.0 在点击时依次尝试 `window.focus()`、延迟重试，以及通过隐藏 iframe 触发桌面壳注册的 `dsh://open` 协议（该协议会让桌面壳恢复并聚焦主窗口）。受 Electron/Windows 的通知激活限制，这一路径不保证在所有机器上生效；设置页底部新增「最近系统通知 / 最近点击」诊断行，可用来判断回调是否送达。Electron 的 Windows 通知中心（Action Center）点击回传也有已知缺陷（[electron/electron#29461](https://github.com/electron/electron/issues/29461)），因此窗口不在前台时横幅会保持显示，优先点横幅。
+- 点击系统通知后窗口是否能被系统/桌面壳拉到前台：1.3.0 在点击时依次尝试 `window.focus()`、延迟重试，以及通过隐藏 iframe 触发桌面壳注册的 `dsh://open` 协议（该协议会让桌面壳恢复并聚焦主窗口）。受 Electron/Windows 的通知激活限制，这一路径不保证在所有机器上生效；设置页底部新增「最近系统通知 / 最近点击」诊断行，可用来判断回调是否送达。Electron 的 Windows 通知中心（Action Center）点击回传也有已知缺陷（[electron/electron#29461](https://github.com/electron/electron/issues/29461)），横幅会正常自动隐藏，所以看到横幅时尽快点它。
 - macOS / Linux 与不同 DSH 版本；DSH 的 Client 内部 API 可能随版本演进，升级后建议重新跑 `node check.mjs`。
 
 ## 常见问题
@@ -128,12 +129,13 @@ node check.mjs      # 或 pnpm check
 - **更新 / 重新安装后行为没变**：已打开的页面会继续运行启动时加载的客户端模块。刷新一次页面（`Ctrl+R`）或重启 DSH，才会换成新代码；开发时的文件改动（HMR）除外。
 - **没有收到系统通知**：先在「设置 → 运行通知」确认「桌面系统通知」开启、权限为「已授权」；再点「发送测试」确认通道；若测试也没有 Windows 弹窗，检查 Windows 通知中心（`Win+N`）与「专注助手 / 勿扰模式」设置。插件发出的通知不会自动清除，会留在通知中心。
 - **点击系统通知没有反应**：请确认运行的是 1.3.0+。打开「设置 → 运行通知」，页面底部有一行诊断：**最近系统通知 / 最近点击**。点完通知后回到设置看：
-  - 若「最近点击」一直显示「尚未收到」：说明 Electron/Windows 没有把点击事件回传给页面（Action Center 的已知缺陷）。请优先点**横幅**（窗口不在前台时横幅会保持显示），或改用页面内卡片。
+  - 若「最近点击」一直显示「尚未收到」：说明 Electron/Windows 没有把点击事件回传给页面（Action Center 的已知缺陷）。请在横幅刚出现时点它，或改用页面内卡片。
   - 若「最近点击」有时间、但窗口没有到前台：点击回调已收到、会话也已切换，只是桌面壳/系统拒绝把窗口拉到前台。1.3.0 会额外用 `dsh://open` 协议请桌面壳激活窗口；如果仍无效，请点任务栏恢复窗口，此时应已停在通知对应的会话上。
 - **不想在看着会话时被打扰**：关闭「当前会话完成时也提示」——该会话在前台时不再提示，后台会话结束仍会通知；也可以直接关掉「页面内提示卡片」通道。
 
 ## Changelog
 
+- **1.3.1** — 去掉系统通知里的「关闭」按钮：此前窗口不在前台/等待选择时设置了 `requireInteraction`，Windows 会因此把通知变成 persistent reminder，并在通知正文底部加一个系统自带的关闭按钮（易被误认为插件控件，测试通知则没有）。现在不再设置该选项，通知与普通 Windows toast 一致。
 - **1.3.0** — 去掉页面内卡片上无意义的关闭按钮（点击卡片即打开会话、到时自动收起）；点击系统通知时在 `window.focus()` 之外再尝试用隐藏 iframe 触发桌面壳的 `dsh://open` 协议（恢复并聚焦主窗口）；设置页底部新增「最近系统通知 / 最近点击」诊断行，用于区分「点击事件没送到页面」和「点击已处理但窗口没到前台」。
 - **1.2.0** — 修复点击系统通知无反应：`close` 事件会在通知移入 Windows 通知中心时触发，旧代码据此释放引用，导致之后点击时 Notification 已被回收、click 回调丢失；现在只在点击/错误/主动关闭时释放，窗口不在前台时用 `requireInteraction` 让横幅保持可点击，并在回到 DSH 时自动切到通知对应会话（3 分钟内）。等待选择的系统通知在回答后自动关闭。
 - **1.1.0** — 新增「页面内提示卡片 / 桌面系统通知」两个通道可分别开关；新增「需要我选择时提醒」（`pendingInteraction` 检测）；首次尝试保留 Notification 引用以避免点击回调丢失（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。

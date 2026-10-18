@@ -637,7 +637,7 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'OS notice is raised even while the window is focused');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 对话已完成');
 	assertWebNotice(FakeNotification.instances[0], 'completion notice');
-	assert.equal(FakeNotification.instances[0].options.requireInteraction, false, 'focused window keeps the normal auto-hide banner');
+	assert.equal(FakeNotification.instances[0].options.requireInteraction, false, 'normal auto-hide toast (no extra dismiss button)');
 	assert.equal(assistant.tree.props['aria-live'], 'polite');
 	/* A missed banner must stay discoverable in the notification center. */
 	advance(60000);
@@ -718,7 +718,7 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'OS notice raised while away');
 	const notice = FakeNotification.instances[0];
 	assert.equal(notice.title, 'DSH · 对话已完成');
-	assert.equal(notice.options.requireInteraction, true, 'away window keeps the clickable banner on screen');
+	assert.equal(notice.options.requireInteraction, false, 'away toast stays a normal toast without a platform dismiss button');
 	assert.ok(notice.options.body.includes('s-main'.slice(-6)), 'OS notice names the session');
 	notice.onclick();
 	assert.deepEqual(openSessions, ['s-main'], 'OS notice click opens the Session');
@@ -860,7 +860,7 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'desktop notice for the waiting choice');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 需要你的选择');
 	assertWebNotice(FakeNotification.instances[0], 'choice notice');
-	assert.equal(FakeNotification.instances[0].options.requireInteraction, true, 'a pending choice keeps its banner visible');
+	assert.equal(FakeNotification.instances[0].options.requireInteraction, false, 'a choice toast has no platform dismiss button either');
 
 	/* The same interaction object across status republishes must not duplicate. */
 	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: firstChoice })]);
