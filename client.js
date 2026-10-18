@@ -42,8 +42,6 @@ window.__ModuleLoader__.load({
 		const REQUEST_PERMISSION_ON_FIRST_GESTURE = true;
 		/** How many notices may stack at once. */
 		const MAX_TOASTS = 4;
-		/** How long an OS notice stays in the notification center. */
-		const SYSTEM_NOTICE_TTL_MS = 15000;
 		/** Offered notice lifetimes, in seconds. */
 		const LIFETIME_PRESETS = [6, 12, 20, 30];
 		/** Fallback values while the Host settings document is not readable yet. */
@@ -597,14 +595,9 @@ window.__ModuleLoader__.load({
 						}
 						openSession(sessionId);
 					};
-					window.setTimeout(() => {
-						try {
-							notice.close();
-						}
-						catch (_error) {
-							/* Already closed. */
-						}
-					}, SYSTEM_NOTICE_TTL_MS);
+					/* No manual close: the OS keeps the notice in the notification
+					 * center until the user dismisses it, so a missed banner is
+					 * still discoverable later. */
 				}
 				catch (_error) {
 					/* System notices are best-effort; the in-app toast remains. */

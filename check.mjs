@@ -613,6 +613,10 @@ publishConfig({});
 	assert.equal(FakeNotification.instances.length, 1, 'OS notice is raised even while the window is focused');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 对话已完成');
 	assert.equal(assistant.tree.props['aria-live'], 'polite');
+	/* A missed banner must stay discoverable in the notification center. */
+	advance(60000);
+	assistant.render();
+	assert.equal(FakeNotification.instances[0].closed, false, 'OS notice is left in the notification center');
 }
 
 /* 1b. English locale swaps every toast string through the locale seat. */
