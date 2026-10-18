@@ -1,0 +1,3 @@
+- insert:
+    - id: done-notify
+      name: '@local/dsh-done-notify'

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Run Finished Notifications",
+    "description": "Shows an in-app notice when a conversation finishes running, sends a system notification while the window is not focused, and adds a Run notifications page in Settings."
+  }
+}
