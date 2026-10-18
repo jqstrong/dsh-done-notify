@@ -517,6 +517,18 @@ function notesOf(tree) {
 	return findAll(tree, byClass('dshDoneNotify_note')).map((node) => textOf(node));
 }
 
+/**
+ * Windows 11 + Electron drop web notifications whose `tag` exceeds 34
+ * characters (electron/electron#40433) and do not re-alert on replacement
+ * when `renotify` is false; every real completion must stay under both limits.
+ */
+function assertWebNotice(notice, label) {
+	assert.equal(typeof notice.options.tag, 'string', `${label} has a tag`);
+	assert.ok(notice.options.tag.length > 0 && notice.options.tag.length <= 34,
+		`${label} tag length ${notice.options.tag.length} <= 34`);
+	assert.equal(notice.options.renotify, true, `${label} re-alerts on replacement`);
+}
+
 function setWindowState({ hidden = false, focused = true } = {}) {
 	documentStub.hidden = hidden;
 	documentStub.hasFocus = () => focused;
@@ -612,6 +624,7 @@ publishConfig({});
 	assert.deepEqual(bodiesOf(assistant.tree), ['会话 -alpha 已结束运行，点击打开'], 'body names the session tail');
 	assert.equal(FakeNotification.instances.length, 1, 'OS notice is raised even while the window is focused');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 对话已完成');
+	assertWebNotice(FakeNotification.instances[0], 'completion notice');
 	assert.equal(assistant.tree.props['aria-live'], 'polite');
 	/* A missed banner must stay discoverable in the notification center. */
 	advance(60000);
@@ -629,6 +642,27 @@ publishConfig({});
 	assert.deepEqual(titlesOf(assistant.tree), ['Run finished'], 'English toast title');
 	assert.deepEqual(bodiesOf(assistant.tree), ['Session -alpha finished running — click to open'], 'English toast body');
 	assert.deepEqual(FakeNotification.instances.map((notice) => notice.title), ['DSH · Run finished'], 'English OS notice title');
+}
+
+/* 1c. Real notices use a short, stable per-Session tag (Windows 11 tag limit). */
+{
+	resetWorld();
+	const assistant = createNotifierInstance();
+	publishStatus(assistant, [sessionRow('session-aaaaaaaa-1111-2222-3333-444444444444', { running: true })]);
+	publishStatus(assistant, [sessionRow('session-aaaaaaaa-1111-2222-3333-444444444444')]);
+	assistant.render();
+	const firstTag = FakeNotification.instances[0].options.tag;
+	assert.match(firstTag, /^dsh-dn-[0-9a-f]{8}$/u, 'tag is a short stable hash');
+	assert.ok(firstTag.length <= 34);
+	publishStatus(assistant, [sessionRow('session-bbbbbbbb-1111-2222-3333-444444444444', { running: true })]);
+	publishStatus(assistant, [sessionRow('session-bbbbbbbb-1111-2222-3333-444444444444')]);
+	assistant.render();
+	const secondTag = FakeNotification.instances[1].options.tag;
+	assert.notEqual(secondTag, firstTag, 'different Sessions get different tags');
+	publishStatus(assistant, [sessionRow('session-aaaaaaaa-1111-2222-3333-444444444444', { running: true })]);
+	publishStatus(assistant, [sessionRow('session-aaaaaaaa-1111-2222-3333-444444444444')]);
+	assistant.render();
+	assert.equal(FakeNotification.instances[2].options.tag, firstTag, 'a Session keeps its tag across runs');
 }
 
 /* 2. The on-screen conversation finishing also notifies by default. */
@@ -922,6 +956,7 @@ publishConfig({});
 	assert.deepEqual(bodiesOf(assistant.tree), ['若看到此卡片，说明提示工作正常。'], 'test notice body');
 	assert.equal(FakeNotification.instances.length, 1, 'system test notice raised too');
 	assert.equal(FakeNotification.instances[0].title, 'DSH · 测试通知');
+	assertWebNotice(FakeNotification.instances[0], 'test notice');
 	openSessions.length = 0;
 	toastsOf(assistant.tree)[0].props.onClick();
 	assert.deepEqual(openSessions, [], 'test notice click does not try to open a Session');

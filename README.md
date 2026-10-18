@@ -70,7 +70,7 @@ pnpm install          # 安装 Host Config 需要的 @deepseek-ai/schemastery
 - **渲染位置**：提示卡片注册在 `shell.overlay`（全窗口浮动层，本身点击穿透，只有卡片接管鼠标事件）；设置页注册在 `settings.section`（设置导航页签）。
 - **配置**：Host `index.js` 导出 `Config`（4 个 `volatile` 字段），客户端通过 `ctx.configForms` 读取实时值并用 revision 保护写入；命名空间为 Loader 行 id `done-notify`，对嵌套（`include:` 前缀）命名空间做了回退解析。
 - **样式**：全部使用 `--dsw-alias-*` / `--dsw-focus-ring-*` 主题 token，跟随深浅色与字号设置；开关控件按官方样式重写，不导入任何 Harness Client 包，也不替换应用根节点。
-- **健壮性**：定时器、监听器、样式表、权限监听全部随插件 effect / 条目卸载清理；系统通知权限、Permissions API、`uiWorkspace` 服务均为可选能力，缺失时降级而不是报错。
+- **健壮性**：定时器、监听器、样式表、权限监听全部随插件 effect / 条目卸载清理；系统通知权限、Permissions API、`uiWorkspace` 服务均为可选能力，缺失时降级而不是报错。系统通知的 `tag` 使用会话 id 的短哈希（≤34 字符），避开 Electron/Windows 11 的 tag 长度 bug。
 
 ## 开发与校验
 
@@ -99,12 +99,12 @@ node check.mjs      # 或 pnpm check
 - 设置写入端到端可用：客户端桥接写入后 `<profile>/cordis.patch.yml` 出现对应 config 段。
 - 客户端 HMR 生效（修改注册顺序无需刷新页面即生效）；`node check.mjs` 全部断言通过。
 - 1.0.1 修复：此前系统通知只在窗口失焦时发送，前台运行时看不到（与「系统通知」开关的直觉不符，也会让「测试通知」与真实运行结束表现不一致）；现在开关开启时，真实运行结束与测试按钮走同一条发送路径，每次都发系统通知。
+- 1.0.3 修复：Electron 在 Windows 11 上会丢弃 `tag` 长度超过 34 字符的 Web Notification（[electron/electron#40433](https://github.com/electron/electron/issues/40433)）。真实的运行结束通知此前用 `dsh-done-notify:session-<uuid>`（约 60 字符）作 tag，因此完全不显示；测试通知的 tag 很短，所以一直正常。现在 tag 改为会话 id 的 32 位哈希（`dsh-dn-xxxxxxxx`，14 字符），并设 `renotify: true` 让同一会话的后续完成仍会提醒。
 
 未验证：
 
 - 视觉与交互观感（截图确认设置页排版、开关配色、toast 位置）。
-- 该桌面壳是否把 Web Notification 透传为 Windows 原生 toast；若被环境屏蔽，应用内提示仍正常工作。
-- macOS / Linux 与不同 DSH 版本；DSH 的 Client 内部 API 可能随版本演进，升级后建议重新跑 `node check.mjs`。
+- macOS / Linux 与不同 DSH 版本；DSH 的 Client 内部 API 可能随版本演进，升级后建议重新跑 `node check.mjs`。Windows 原生通知通道已在本机通过「发送测试」与实际运行结束验证（1.0.3）。
 
 ## 常见问题
 
@@ -114,6 +114,7 @@ node check.mjs      # 或 pnpm check
 
 ## Changelog
 
+- **1.0.3** — 修复真实运行结束的系统通知不显示：通知 tag 超过 34 字符会被 Electron/Windows 11 丢弃（[electron/electron#40433](https://github.com/electron/electron/issues/40433)），改用会话 id 哈希出的短 tag，并开启 `renotify` 让同一会话的后续完成继续提醒。
 - **1.0.2** — 系统通知不再在 15 秒后主动关闭，错过横幅后仍可在 Windows 通知中心找到；README 补充升级后需刷新页面、通知排查等说明。修复此前「重新安装后页面仍在跑旧客户端模块导致行为不变」的误报。
 - **1.0.1** — 系统通知改为每次运行结束都发送（不再只在窗口失焦时），修复「设置已开启但前台运行结束没有系统通知」；设置页排版、焦点样式、时长归一化与若干健壮性修复；补充 LICENSE、仓库元数据与 README。
 - **1.0.0** — 首个版本：应用内提示、系统通知、设置页、逻辑自检。

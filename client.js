@@ -259,6 +259,26 @@ window.__ModuleLoader__.load({
 			return tail.length > 6 ? tail.slice(-6) : tail;
 		}
 
+		/**
+		 * Upper bound on web-notification tags on Windows 11: Electron drops a
+		 * notification whose `tag` is longer than 34 characters
+		 * (electron/electron#40433), so the real tag is derived from a stable
+		 * 32-bit hash of the Session id instead of the id itself.
+		 */
+		const NOTIFICATION_TAG_LIMIT = 34;
+
+		/** Stable short tag for one Session, so the same Session replaces its notice. */
+		function notificationTag(sessionId) {
+			const text = typeof sessionId === 'string' ? sessionId : String(sessionId ?? '');
+			let hash = 0x811c9dc5;
+			for (let index = 0; index < text.length; index++) {
+				hash ^= text.charCodeAt(index);
+				hash = Math.imul(hash, 0x01000193) >>> 0;
+			}
+			const tag = `dsh-dn-${hash.toString(16).padStart(8, '0')}`;
+			return tag.length > NOTIFICATION_TAG_LIMIT ? tag.slice(0, NOTIFICATION_TAG_LIMIT) : tag;
+		}
+
 		/** Whether the page is hidden, minimized, or its window is not focused. */
 		function isWindowInactive() {
 			try {
@@ -576,8 +596,9 @@ window.__ModuleLoader__.load({
 					const body = preview ? tr('test.systemBody') : tr('systemBody', { id: shortSessionId(sessionId) });
 					const notice = new Ctor(title, {
 						body,
-						tag: preview ? 'dsh-done-notify:test' : `dsh-done-notify:${sessionId}`,
-						renotify: false,
+						tag: preview ? 'dsh-dn-test' : notificationTag(sessionId),
+						/* Replacing an existing notice should alert again: every run end matters. */
+						renotify: true,
 						silent: false,
 					});
 					notice.onclick = () => {
