@@ -11,12 +11,18 @@ import z from '@deepseek-ai/schemastery';
  * there directly.
  */
 const SettingsFields = {
-	/** Also show the in-app notice when the finished conversation is on screen. */
-	notifyWhenFocused: z.boolean().default(true)
-		.description('Show the in-app notice even when the finished conversation is the one on screen.'),
-	/** Raise an OS-level notice while the window is hidden or unfocused. */
+	/** Show the in-page notice card inside the DSH window. */
+	notifyInApp: z.boolean().default(true)
+		.description('Show a notice card at the bottom-right of the DSH window.'),
+	/** Raise desktop system notifications (Windows notification center). */
 	systemNotifications: z.boolean().default(true)
-		.description('Send a system notification when a run ends while the window is hidden or unfocused.'),
+		.description('Send a desktop system notification on every run end and waiting choice.'),
+	/** Notify when a conversation waits for the user's choice or approval. */
+	notifyWhenNeedsInput: z.boolean().default(true)
+		.description('Notify when a conversation is waiting for your choice, confirmation or approval.'),
+	/** Also notify when the finished conversation is the one on screen. */
+	notifyWhenFocused: z.boolean().default(true)
+		.description('Also notify when the finished conversation is the one on screen.'),
 	/** Announce subagent Sessions too. */
 	notifySubagents: z.boolean().default(false)
 		.description('Also announce subagent conversations; off by default to avoid noise.'),
@@ -26,8 +32,10 @@ const SettingsFields = {
 };
 
 export const Config = z.object({
-	notifyWhenFocused: SettingsFields.notifyWhenFocused.volatile(),
+	notifyInApp: SettingsFields.notifyInApp.volatile(),
 	systemNotifications: SettingsFields.systemNotifications.volatile(),
+	notifyWhenNeedsInput: SettingsFields.notifyWhenNeedsInput.volatile(),
+	notifyWhenFocused: SettingsFields.notifyWhenFocused.volatile(),
 	notifySubagents: SettingsFields.notifySubagents.volatile(),
 	toastLifetimeSeconds: SettingsFields.toastLifetimeSeconds.volatile(),
 });

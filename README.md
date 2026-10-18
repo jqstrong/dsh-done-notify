@@ -1,22 +1,25 @@
 # dsh-done-notify · 运行完成通知
 
-> A DeepSeek Harness (DSH) plugin that notifies you when a conversation finishes running — an in-app toast in the corner of the window, an OS-level notification while the window is minimized or unfocused, and a dedicated **Settings → Run notifications** page to configure it.
+> A DeepSeek Harness (DSH) plugin that notifies you when a conversation finishes running or waits for your choice — through a selectable **in-page notice card** and/or a **desktop system notification**, configured on a dedicated **Settings → Run notifications** page.
 
-DSH 插件（bundle）：会话从「运行中」变为空闲时给出提示，解决「跑完了却不知道」的问题；并在**设置**里提供 **「运行通知」** 配置页。
+DSH 插件（bundle）：会话跑完、或需要你做选择时给出提示，解决「跑完了却不知道」「卡在等选择」的问题；**设置 → 运行通知** 里可以选择用哪种方式提醒。
 
-- 应用内提示：窗口右下角弹出卡片，带会话 id 尾号；点击打开该会话，悬停暂停消失，到时自动收起。
-- 系统通知：**每次运行结束**都会发一条原生系统通知（Web Notification，可在设置里关闭，与窗口焦点无关），点击回到会话；通知会留在 Windows 通知中心，直到你手动清除，错过横幅后也能找回。
-- 设置页：开关、提示时长、通知权限状态、一键测试通知，全部即时生效并保存在 DSH 配置档案里。
+- **页面内提示卡片**：DSH 窗口右下角弹出卡片，带会话 id 尾号；点击打开该会话，悬停暂停消失，到时自动收起。
+- **桌面系统通知**：Windows 桌面右下角的系统通知（Web Notification），点击打开会话并尝试聚焦窗口；通知会留在通知中心，直到手动清除。
+- 两种通道**可以分别在设置里开关**（都开、只开其一、都关都可以）。
+- **需要你选择时提醒**：会话在等待选择 / 确认 / 审批时也会提醒（可单独关闭）。
+- 设置项立即生效，保存在 DSH 配置档案里，重启后仍然有效。
 
 ## 功能
 
-| 场景 | 应用内提示 | 系统通知 |
+| 场景 | 页面内卡片 | 桌面系统通知 |
 | --- | --- | --- |
-| 会话运行结束（无论窗口是否在前台） | ✅ | ✅（开关开启且已授权时） |
+| 会话运行结束（无论窗口是否在前台） | ✅（通道开启时） | ✅（通道开启且已授权时） |
 | 你正看着的会话结束，且关闭了「当前会话完成时也提示」 | ❌ | ❌ |
-| 子代理（subagent）会话结束 | ❌（可在设置中开启） | ❌（开启后 ✅） |
-| 系统通知开关关闭 / 权限被拒绝 | — | ❌ |
-| 多个会话几乎同时结束 | 最多堆叠 4 条，保留最新的 | 每个会话一条（同会话覆盖） |
+| 会话等待你选择 / 确认 / 审批（「需要我选择时提醒」开启时） | ✅ | ✅ |
+| 子代理（subagent）会话结束或等待选择 | ❌（开启「子代理会话也提示」后 ✅） | 同左 |
+| 对应通道开关关闭 / 通知权限被拒绝 | — | ❌ |
+| 多个事件几乎同时发生 | 最多堆叠 4 条，保留最新的 | 每个会话一条（同会话同类型覆盖） |
 
 ## 设置 → 运行通知
 
@@ -24,12 +27,14 @@ DSH 插件（bundle）：会话从「运行中」变为空闲时给出提示，�
 
 | 设置项 | 默认 | 说明 |
 | --- | --- | --- |
-| 当前会话完成时也提示 | 开 | 关闭后只有后台会话跑完才提示；你正看着的会话结束时不再弹卡片 |
-| 系统通知 | 开 | 每次运行结束都发送系统级通知，与窗口焦点无关（需要通知权限） |
-| 子代理会话也提示 | 关 | 开启后 subagent 运行结束同样提示 |
-| 提示显示时长 | 12 秒 | 6 / 12 / 20 / 30 秒可选（配置文件里可写 3–60 的整数） |
+| 页面内提示卡片 | 开 | 在 DSH 窗口右下角弹出提示卡片 |
+| 桌面系统通知 | 开 | 在桌面右下角的系统通知区域提醒（需要通知权限） |
+| 需要我选择时提醒 | 开 | 会话等待你的选择、确认或审批时也提醒 |
+| 当前会话完成时也提示 | 开 | 关闭后，只有后台会话跑完才提示；你正看着的会话结束不再弹卡片 |
+| 子代理会话也提示 | 关 | 开启后 subagent 运行结束 / 等待选择同样提示 |
+| 提示显示时长 | 12 秒 | 页面内卡片 6 / 12 / 20 / 30 秒可选（配置文件可写 3–60 的整数） |
 | 通知权限 | — | 显示「已授权 / 尚未授权 / 已被拒绝 / 不支持」，可主动申请授权 |
-| 测试通知 | — | 立刻发一条应用内提示；系统通知开启且已授权时同时发送系统通知 |
+| 测试通知 | — | 按当前开启的通道立刻发一条测试提示 |
 
 设置**立即生效**，由 Host 写入当前 DSH 配置档案的 patch 层（`<profile>/cordis.patch.yml`），重启后仍然有效；也可以直接编辑该文件：
 
@@ -37,13 +42,19 @@ DSH 插件（bundle）：会话从「运行中」变为空闲时给出提示，�
 - id: done-notify
   name: "@local/dsh-done-notify"
   config:
-    notifyWhenFocused: true
+    notifyInApp: true
     systemNotifications: true
+    notifyWhenNeedsInput: true
+    notifyWhenFocused: true
     notifySubagents: false
     toastLifetimeSeconds: 12
 ```
 
-插件行带有 `Config` schema（4 个 `volatile` 字段），因此设置页走官方配置表单管线（`ctx.configForms` + Host `settings` 服务，revision 保护写入）；插件管理页里也会自动生成同一份表单作为备用入口。
+插件行带有 `Config` schema（6 个 `volatile` 字段），因此设置页走官方配置表单管线（`ctx.configForms` + Host `settings` 服务，revision 保护写入）；插件管理页里也会自动生成同一份表单作为备用入口。
+
+### 关于「桌面右下角的应用通知」
+
+桌面级的自绘通知窗口（在应用窗口之外、屏幕右下角浮一个由插件自己渲染的卡片）**无法通过 DSH 插件公开 API 实现**：客户端插件运行在页面里，桌面壳没有向插件暴露「创建/控制独立窗口」的 IPC。插件能用的桌面级通道就是系统通知（Web Notification，即 Windows 通知中心里的那条）——它本来就出现在桌面右下角，且可点击回到会话。所以设置里提供「页面内卡片 / 桌面系统通知」两个通道供选择；如果以后桌面壳开放窗口接口，可以再补一个自绘桌面通知通道。
 
 ## 安装
 
@@ -65,10 +76,12 @@ pnpm install          # 安装 Host Config 需要的 @deepseek-ai/schemastery
 
 ## 实现要点
 
-- **数据源**：Client 端已有的会话状态源（`useSessionStatus` / `useSessions` 标准 props，由官方 `@deepseek-ai/dsh-client-ui-session` 提供）。不轮询、不订阅全量会话事件、不读 DOM。
-- **判定**：只关心 `running: true → false` 的跳变；用会话列表行区分主视图 / 子代理。系统通知与窗口焦点无关，开关开启时每次运行结束都会发送；`document.hidden` / `document.hasFocus()` 只用于「窗口隐藏时应用内提示不提前自动消失」。
-- **渲染位置**：提示卡片注册在 `shell.overlay`（全窗口浮动层，本身点击穿透，只有卡片接管鼠标事件）；设置页注册在 `settings.section`（设置导航页签）。
-- **配置**：Host `index.js` 导出 `Config`（4 个 `volatile` 字段），客户端通过 `ctx.configForms` 读取实时值并用 revision 保护写入；命名空间为 Loader 行 id `done-notify`，对嵌套（`include:` 前缀）命名空间做了回退解析。
+- **数据源**：Client 端已有的会话状态源（`useSessionStatus` / `useSessions` 标准 props，由官方 `@deepseek-ai/dsh-client-ui-session` 提供），包含 `running` 与 `pendingInteraction`。不轮询、不订阅全量会话事件、不读 DOM。
+- **完成判定**：只关心 `running: true → false` 的跳变；用会话列表行区分主视图 / 子代理；焦点状态只影响「正在看的会话是否提示」和隐藏时卡片不提前消失。
+- **等待判定**：`pendingInteraction` 从无到有、或换成一个新的交互对象时提醒一次；同一个交互在状态重发时不会重复提醒。
+- **通道**：`notifyInApp` 与 `systemNotifications` 独立控制；系统通知点击会打开对应会话并调用 `window.focus()`，同时**保留 Notification 对象引用**——Electron 里被 GC 的 Notification 会丢失 click 回调（[electron/electron#29461](https://github.com/electron/electron/issues/29461)），这是此前点击无反应的根因。
+- **渲染位置**：卡片注册在 `shell.overlay`（全窗口浮动层，本身点击穿透，只有卡片接管鼠标事件）；设置页注册在 `settings.section`（设置导航页签）。
+- **配置**：Host `index.js` 导出 `Config`（6 个 `volatile` 字段），客户端通过 `ctx.configForms` 读取实时值并用 revision 保护写入；命名空间为 Loader 行 id `done-notify`，对嵌套（`include:` 前缀）命名空间做了回退解析。
 - **样式**：全部使用 `--dsw-alias-*` / `--dsw-focus-ring-*` 主题 token，跟随深浅色与字号设置；开关控件按官方样式重写，不导入任何 Harness Client 包，也不替换应用根节点。
 - **健壮性**：定时器、监听器、样式表、权限监听全部随插件 effect / 条目卸载清理；系统通知权限、Permissions API、`uiWorkspace` 服务均为可选能力，缺失时降级而不是报错。系统通知的 `tag` 使用会话 id 的短哈希（≤34 字符），避开 Electron/Windows 11 的 tag 长度 bug。
 
@@ -79,12 +92,12 @@ pnpm install
 node check.mjs      # 或 pnpm check
 ```
 
-`check.mjs` 在 Node VM 里用最小的 React hooks / DOM / 定时器 / Notification / configForms 桩运行真实的 `client.js`，覆盖：空闲跳变检测、主视图与子代理过滤、失焦与隐藏判定、系统通知文案与点击、堆叠上限、可配置的提示时长、悬停暂停、点击 / 键盘打开、关闭按钮、权限四态、测试通知、设置页加载 / 就绪 / 只读、开关与时长写入、写入失败提示、嵌套命名空间回退、中英文案。**这是分支与数值检查，不是视觉验证。**
+`check.mjs` 在 Node VM 里用最小的 React hooks / DOM / 定时器 / Notification / configForms 桩运行真实的 `client.js`，覆盖：空闲跳变检测、等待选择检测、主视图与子代理过滤、失焦与隐藏判定、通道分别开关、系统通知文案 / tag / 点击、通知引用保留、堆叠上限、可配置的提示时长、悬停暂停、点击 / 键盘打开、关闭按钮、权限四态、测试通知、设置页加载 / 就绪 / 只读、开关与时长写入、写入失败提示、嵌套命名空间回退、中英文案。**这是分支与数值检查，不是视觉验证。**
 
 | 文件 | 作用 |
 | --- | --- |
-| `index.js` | Host 半：`Config` schema（4 个 volatile 字段）+ 空 `apply` |
-| `client.js` | 客户端半：状态监听、toast、系统通知、权限、设置桥接、设置页、样式 |
+| `index.js` | Host 半：`Config` schema（6 个 volatile 字段）+ 空 `apply` |
+| `client.js` | 客户端半：状态监听、通道选择、toast、系统通知、权限、设置桥接、设置页、样式 |
 | `cordis.patch.yml` | bundle 补丁：插入 `done-notify` 行 |
 | `locale/*.json` | 插件列表里的标题 / 描述 |
 | `icon.svg` | 原创图标（铃铛 + 对勾） |
@@ -94,29 +107,33 @@ node check.mjs      # 或 pnpm check
 
 已验证（本机，无浏览器控制能力下能取得的最强证据）：
 
-- Host 配置表单被正式提供（`Config.listConfigs` 返回 `status: "schema"`，字段带 `x-cordis.volatile`）。
+- Host 配置表单被正式提供（`Config.listConfigs` 返回 `status: "schema"`，6 个字段带 `x-cordis.volatile`）。
 - 设置页与通知器均注册成功（`Slots.listSubTree` 的 `settings.section` 与 `shell.overlay` 中对应条目 `active: true`）。
 - 设置写入端到端可用：客户端桥接写入后 `<profile>/cordis.patch.yml` 出现对应 config 段。
 - 客户端 HMR 生效（修改注册顺序无需刷新页面即生效）；`node check.mjs` 全部断言通过。
-- 1.0.1 修复：此前系统通知只在窗口失焦时发送，前台运行时看不到（与「系统通知」开关的直觉不符，也会让「测试通知」与真实运行结束表现不一致）；现在开关开启时，真实运行结束与测试按钮走同一条发送路径，每次都发系统通知。
-- 1.0.3 修复：Electron 在 Windows 11 上会丢弃 `tag` 长度超过 34 字符的 Web Notification（[electron/electron#40433](https://github.com/electron/electron/issues/40433)）。真实的运行结束通知此前用 `dsh-done-notify:session-<uuid>`（约 60 字符）作 tag，因此完全不显示；测试通知的 tag 很短，所以一直正常。现在 tag 改为会话 id 的 32 位哈希（`dsh-dn-xxxxxxxx`，14 字符），并设 `renotify: true` 让同一会话的后续完成仍会提醒。
+- 1.0.1 修复：系统通知不再只在窗口失焦时发送，真实运行结束与测试按钮走同一条发送路径。
+- 1.0.3 修复：Electron 在 Windows 11 上会丢弃 `tag` 长度超过 34 字符的 Web Notification（[electron/electron#40433](https://github.com/electron/electron/issues/40433)），真实通知此前用约 60 字符的 tag 因此完全不显示；现改为会话 id 的 32 位哈希（`dsh-dn-xxxxxxxx`，14 字符）并开启 `renotify`。
+- 1.1.0 新增：通道分别开关、等待选择提醒、保留 Notification 引用修复点击回调（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。
 
 未验证：
 
 - 视觉与交互观感（截图确认设置页排版、开关配色、toast 位置）。
-- macOS / Linux 与不同 DSH 版本；DSH 的 Client 内部 API 可能随版本演进，升级后建议重新跑 `node check.mjs`。Windows 原生通知通道已在本机通过「发送测试」与实际运行结束验证（1.0.3）。
+- 点击系统通知后窗口是否能被系统/桌面壳拉到前台：代码已打开会话并调用 `window.focus()`、且保留通知引用确保点击回调执行；Windows 的焦点抢占策略与桌面壳行为仍需实测。
+- macOS / Linux 与不同 DSH 版本；DSH 的 Client 内部 API 可能随版本演进，升级后建议重新跑 `node check.mjs`。
 
 ## 常见问题
 
 - **更新 / 重新安装后行为没变**：已打开的页面会继续运行启动时加载的客户端模块。刷新一次页面（`Ctrl+R`）或重启 DSH，才会换成新代码；开发时的文件改动（HMR）除外。
-- **没有收到系统通知**：先在「设置 → 运行通知」确认权限为「已授权」；再点「发送测试」确认通道；若测试也没有 Windows 弹窗，检查 Windows 通知中心（`Win+N`）与「专注助手 / 勿扰模式」设置。插件发出的通知不会自动清除，会留在通知中心。
-- **不想在看着会话时被打扰**：关闭「当前会话完成时也提示」——该会话在前台时不再提示，后台会话结束仍会通知。
+- **没有收到系统通知**：先在「设置 → 运行通知」确认「桌面系统通知」开启、权限为「已授权」；再点「发送测试」确认通道；若测试也没有 Windows 弹窗，检查 Windows 通知中心（`Win+N`）与「专注助手 / 勿扰模式」设置。插件发出的通知不会自动清除，会留在通知中心。
+- **点击系统通知没有反应**：先确认运行的是 1.1.0+（设置页有「页面内提示卡片 / 桌面系统通知」两个开关）。1.1.0 修复了 Electron 中通知对象被回收导致 click 回调丢失的问题；点击会打开对应会话并尝试聚焦窗口。
+- **不想在看着会话时被打扰**：关闭「当前会话完成时也提示」——该会话在前台时不再提示，后台会话结束仍会通知；也可以直接关掉「页面内提示卡片」通道。
 
 ## Changelog
 
-- **1.0.3** — 修复真实运行结束的系统通知不显示：通知 tag 超过 34 字符会被 Electron/Windows 11 丢弃（[electron/electron#40433](https://github.com/electron/electron/issues/40433)），改用会话 id 哈希出的短 tag，并开启 `renotify` 让同一会话的后续完成继续提醒。
-- **1.0.2** — 系统通知不再在 15 秒后主动关闭，错过横幅后仍可在 Windows 通知中心找到；README 补充升级后需刷新页面、通知排查等说明。修复此前「重新安装后页面仍在跑旧客户端模块导致行为不变」的误报。
-- **1.0.1** — 系统通知改为每次运行结束都发送（不再只在窗口失焦时），修复「设置已开启但前台运行结束没有系统通知」；设置页排版、焦点样式、时长归一化与若干健壮性修复；补充 LICENSE、仓库元数据与 README。
+- **1.1.0** — 新增「页面内提示卡片 / 桌面系统通知」两个通道可分别开关；新增「需要我选择时提醒」（`pendingInteraction` 检测）；修复系统通知点击无反应：保留 Notification 对象引用，避免 Electron 中 click 回调因对象回收而丢失（[electron/electron#29461](https://github.com/electron/electron/issues/29461)）。
+- **1.0.3** — 修复真实运行结束的系统通知不显示：通知 tag 超过 34 字符会被 Electron/Windows 11 丢弃（[electron/electron#40433](https://github.com/electron/electron/issues/40433)），改用会话 id 哈希出的短 tag 并开启 `renotify`。
+- **1.0.2** — 系统通知不再在 15 秒后主动关闭，错过横幅后仍可在 Windows 通知中心找到；README 补充升级后需刷新页面、通知排查等说明。
+- **1.0.1** — 系统通知改为每次运行结束都发送（不再只在窗口失焦时）；设置页排版、焦点样式、时长归一化与若干健壮性修复；补充 LICENSE、仓库元数据与 README。
 - **1.0.0** — 首个版本：应用内提示、系统通知、设置页、逻辑自检。
 
 ## License

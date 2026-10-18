@@ -46,8 +46,10 @@ window.__ModuleLoader__.load({
 		const LIFETIME_PRESETS = [6, 12, 20, 30];
 		/** Fallback values while the Host settings document is not readable yet. */
 		const DEFAULT_SETTINGS = Object.freeze({
-			notifyWhenFocused: true,
+			notifyInApp: true,
 			systemNotifications: true,
+			notifyWhenNeedsInput: true,
+			notifyWhenFocused: true,
 			notifySubagents: false,
 			toastLifetimeSeconds: 12,
 		});
@@ -64,6 +66,10 @@ window.__ModuleLoader__.load({
 			body: '会话 {id} 已结束运行，点击打开',
 			systemTitle: 'DSH · 对话已完成',
 			systemBody: '会话 {id} 已结束运行，点击回到会话',
+			'toast.questionTitle': '需要你的选择',
+			'toast.questionBody': '会话 {id} 正在等待你的选择，点击打开',
+			systemQuestionTitle: 'DSH · 需要你的选择',
+			systemQuestionBody: '会话 {id} 正在等待你的选择，点击打开',
 			close: '关闭通知',
 			region: '完成通知',
 			'toast.testTitle': '这是一条测试提示',
@@ -71,31 +77,36 @@ window.__ModuleLoader__.load({
 			'test.systemTitle': 'DSH · 测试通知',
 			'test.systemBody': '系统通知工作正常。',
 			'settings.nav': '运行通知',
-			'settings.intro': '会话运行结束后会弹出提示。以下设置保存在当前 DSH 配置档案中，重启后依然有效。',
+			'settings.intro': '会话运行结束、或需要你选择时，按下面选中的方式提醒你。设置保存在当前 DSH 配置档案中，重启后依然有效。',
 			'settings.loading': '正在读取设置…',
 			'settings.unavailable': '当前配置档案没有提供这个插件的设置项。',
 			'settings.readonly': '当前配置档案为只读，设置无法保存。',
 			'settings.saveFailed': '保存失败，请重试。',
 			'settings.savedHint': '修改会立即生效。',
 			'settings.seconds': '{seconds} 秒',
+			'row.inapp.title': '页面内提示卡片',
+			'row.inapp.description': '在 DSH 窗口右下角弹出提示卡片；窗口最小化时会在你回到应用后看到。',
 			'row.focused.title': '当前会话完成时也提示',
 			'row.focused.description': '关闭后只有后台会话跑完才提示；你正在看的会话结束时不再弹卡片。',
-			'row.system.title': '系统通知',
-			'row.system.description': '每次运行结束都发送系统级通知，无论窗口是否失焦（需要通知权限）。',
+			'row.system.title': '桌面系统通知',
+			'row.system.description': '在桌面右下角的系统通知区域提醒（Windows 通知中心），需要通知权限。',
+			'row.needsInput.title': '需要我选择时提醒',
+			'row.needsInput.description': '会话在等待你的选择、确认或审批时，也按上面的方式提醒。',
 			'row.subagent.title': '子代理会话也提示',
 			'row.subagent.description': '开启后，子代理（subagent）运行结束同样会提示；默认关闭以免打扰。',
 			'row.duration.title': '提示显示时长',
-			'row.duration.description': '应用内提示卡片自动消失前停留的时间。',
+			'row.duration.description': '页面内提示卡片自动消失前停留的时间。',
 			'row.permission.title': '通知权限',
-			'row.permission.description': '系统通知需要浏览器 / 桌面壳的通知权限。',
+			'row.permission.description': '桌面系统通知需要浏览器 / 桌面壳的通知权限。',
 			'permission.granted': '已授权',
 			'permission.default': '尚未授权',
 			'permission.denied': '已被拒绝，请在系统设置中允许本应用发送通知',
 			'permission.unsupported': '当前环境不支持系统通知',
 			'permission.request': '申请权限',
 			'row.test.title': '测试通知',
-			'row.test.description': '立刻发送一条应用内提示；已开启系统通知且已授权时，同时发送系统通知。',
+			'row.test.description': '按当前选中的通知方式立刻发送一条测试提示，用来确认效果。',
 			'row.test.action': '发送测试',
+			'row.test.disabled': '已关闭所有通知方式，打开至少一个才能测试',
 			'row.state.saving': '保存中…',
 		};
 
@@ -104,6 +115,10 @@ window.__ModuleLoader__.load({
 			body: 'Session {id} finished running — click to open',
 			systemTitle: 'DSH · Run finished',
 			systemBody: 'Session {id} finished running — click to return',
+			'toast.questionTitle': 'Waiting for your choice',
+			'toast.questionBody': 'Session {id} is waiting for your choice — click to open',
+			systemQuestionTitle: 'DSH · Waiting for your choice',
+			systemQuestionBody: 'Session {id} is waiting for your choice — click to open',
 			close: 'Dismiss notification',
 			region: 'Completion notices',
 			'toast.testTitle': 'Test notification',
@@ -111,31 +126,36 @@ window.__ModuleLoader__.load({
 			'test.systemTitle': 'DSH · Test notification',
 			'test.systemBody': 'System notifications work.',
 			'settings.nav': 'Run notifications',
-			'settings.intro': 'A notice appears when a conversation finishes running. These settings are stored in the active DSH profile and survive restarts.',
+			'settings.intro': 'Get notified by the selected channels when a conversation finishes running or waits for your choice. These settings are stored in the active DSH profile.',
 			'settings.loading': 'Reading settings…',
 			'settings.unavailable': 'The active profile does not serve settings for this plugin.',
 			'settings.readonly': 'The active profile is read-only, so settings cannot be saved.',
 			'settings.saveFailed': 'Could not save. Please try again.',
 			'settings.savedHint': 'Changes take effect immediately.',
 			'settings.seconds': '{seconds}s',
+			'row.inapp.title': 'In-page notice card',
+			'row.inapp.description': 'Show a notice card at the bottom-right of the DSH window; a hidden window shows it when you return.',
 			'row.focused.title': 'Notify while the window is focused',
 			'row.focused.description': 'When off, only background conversations announce their finish.',
-			'row.system.title': 'System notifications',
-			'row.system.description': 'Send an OS-level notification on every run end, whether or not the window is focused (requires notification permission).',
+			'row.system.title': 'Desktop system notifications',
+			'row.system.description': 'Notify in the desktop notification area (Windows notification center); requires notification permission.',
+			'row.needsInput.title': 'Notify when my choice is needed',
+			'row.needsInput.description': 'Also notify by the selected channels when a conversation waits for your choice, confirmation or approval.',
 			'row.subagent.title': 'Notify for subagent conversations',
 			'row.subagent.description': 'Also announce subagent runs. Off by default to avoid noise.',
 			'row.duration.title': 'Notice lifetime',
-			'row.duration.description': 'How long the in-app card stays on screen before it disappears.',
+			'row.duration.description': 'How long the in-page card stays on screen before it disappears.',
 			'row.permission.title': 'Notification permission',
-			'row.permission.description': 'System notifications require the browser / desktop notification permission.',
+			'row.permission.description': 'Desktop system notifications require the browser / desktop notification permission.',
 			'permission.granted': 'Granted',
 			'permission.default': 'Not granted yet',
 			'permission.denied': 'Denied — allow notifications for this app in the system settings',
 			'permission.unsupported': 'System notifications are not supported here',
 			'permission.request': 'Request permission',
 			'row.test.title': 'Test notification',
-			'row.test.description': 'Send an in-app notice now; a system notice follows when it is enabled and permitted.',
+			'row.test.description': 'Send a test notification through the currently selected channels.',
 			'row.test.action': 'Send test',
+			'row.test.disabled': 'All channels are off; enable at least one to test',
 			'row.state.saving': 'Saving…',
 		};
 
@@ -366,12 +386,37 @@ window.__ModuleLoader__.load({
 			}
 		}
 
+		/**
+		 * Live OS notices stay referenced: a garbage-collected Notification loses
+		 * its click handler in Electron, so a click would never open the Session.
+		 */
+		const liveNotices = new Map();
+		/** Upper bound so a long-running window cannot pile up notification objects. */
+		const MAX_LIVE_NOTICES = 16;
+
+		/** Retain one notice under its tag, evicting the oldest reference past the cap. */
+		function retainNotice(tag, notice) {
+			liveNotices.set(tag, notice);
+			while (liveNotices.size > MAX_LIVE_NOTICES) {
+				const oldest = liveNotices.keys().next().value;
+				if (oldest === undefined) break;
+				liveNotices.delete(oldest);
+			}
+		}
+
+		/** Drop one retained notice reference (it stays in the OS notification center). */
+		function releaseNotice(tag) {
+			liveNotices.delete(tag);
+		}
+
 		/* ------------------------------------------------------- settings bridge */
 
 		/** Compare two normalized setting objects field by field. */
 		function sameSettings(left, right) {
-			return left.notifyWhenFocused === right.notifyWhenFocused
+			return left.notifyInApp === right.notifyInApp
 				&& left.systemNotifications === right.systemNotifications
+				&& left.notifyWhenNeedsInput === right.notifyWhenNeedsInput
+				&& left.notifyWhenFocused === right.notifyWhenFocused
 				&& left.notifySubagents === right.notifySubagents
 				&& left.toastLifetimeSeconds === right.toastLifetimeSeconds;
 		}
@@ -385,8 +430,10 @@ window.__ModuleLoader__.load({
 				: DEFAULT_SETTINGS.toastLifetimeSeconds;
 			const seconds = Math.min(60, Math.max(3, Math.round(rawSeconds)));
 			return {
-				notifyWhenFocused: boolean('notifyWhenFocused'),
+				notifyInApp: boolean('notifyInApp'),
 				systemNotifications: boolean('systemNotifications'),
+				notifyWhenNeedsInput: boolean('notifyWhenNeedsInput'),
+				notifyWhenFocused: boolean('notifyWhenFocused'),
 				notifySubagents: boolean('notifySubagents'),
 				toastLifetimeSeconds: seconds,
 			};
@@ -584,30 +631,37 @@ window.__ModuleLoader__.load({
 				return false;
 			}
 
-			/** Raise an OS-level notice, for a completion or for the test button. */
+			/** Raise an OS-level notice for a completion, a pending choice, or the test button. */
 			function fireSystemNotice(sessionId, tr, options) {
-				const preview = options !== undefined && options.preview === true;
+				const kind = options !== undefined && options.kind === 'question'
+					? 'question'
+					: options !== undefined && options.kind === 'test' ? 'test' : 'done';
 				try {
 					if (typeof window === 'undefined') return;
 					const Ctor = window.Notification;
 					if (typeof Ctor !== 'function') return;
 					if (Ctor.permission !== 'granted') return;
-					const title = preview ? tr('test.systemTitle') : tr('systemTitle');
-					const body = preview ? tr('test.systemBody') : tr('systemBody', { id: shortSessionId(sessionId) });
+					const title = kind === 'test'
+						? tr('test.systemTitle')
+						: kind === 'question' ? tr('systemQuestionTitle') : tr('systemTitle');
+					const bodyKey = kind === 'test'
+						? 'test.systemBody'
+						: kind === 'question' ? 'systemQuestionBody' : 'systemBody';
+					const body = kind === 'test' ? tr(bodyKey) : tr(bodyKey, { id: shortSessionId(sessionId) });
+					const tag = kind === 'test'
+						? 'dsh-dn-test'
+						: notificationTag(kind === 'question' ? `${sessionId}:question` : sessionId);
 					const notice = new Ctor(title, {
 						body,
-						tag: preview ? 'dsh-dn-test' : notificationTag(sessionId),
-						/* Replacing an existing notice should alert again: every run end matters. */
+						tag,
+						/* Replacing an existing notice should alert again: every event matters. */
 						renotify: true,
 						silent: false,
 					});
+					/* Keep the object alive: a collected Notification drops its click handler. */
+					retainNotice(tag, notice);
 					notice.onclick = () => {
-						try {
-							notice.close();
-						}
-						catch (_error) {
-							/* The notice may already be gone. */
-						}
+						releaseNotice(tag);
 						try {
 							window.focus();
 						}
@@ -615,6 +669,12 @@ window.__ModuleLoader__.load({
 							/* Focus can be refused by the shell; opening still works. */
 						}
 						openSession(sessionId);
+					};
+					notice.onclose = () => {
+						releaseNotice(tag);
+					};
+					notice.onerror = () => {
+						releaseNotice(tag);
 					};
 					/* No manual close: the OS keeps the notice in the notification
 					 * center until the user dismisses it, so a missed banner is
@@ -635,8 +695,10 @@ window.__ModuleLoader__.load({
 				const settings = (settingState !== null && typeof settingState === 'object' && settingState.values !== undefined)
 					? settingState.values
 					: DEFAULT_SETTINGS;
-				const notifyWhenFocused = settings.notifyWhenFocused === true;
+				const notifyInApp = settings.notifyInApp === true;
 				const systemNotifications = settings.systemNotifications === true;
+				const notifyWhenNeedsInput = settings.notifyWhenNeedsInput === true;
+				const notifyWhenFocused = settings.notifyWhenFocused === true;
 				const notifySubagents = settings.notifySubagents === true;
 				const toastLifetimeMs = Math.max(3, settings.toastLifetimeSeconds) * 1000;
 
@@ -647,6 +709,7 @@ window.__ModuleLoader__.load({
 				const sessionsRef = React.useRef(sessions);
 				const toastsRef = React.useRef(toasts);
 				const previousRunning = React.useRef(new Map());
+				const previousPending = React.useRef(new Map());
 				const timers = React.useRef(new Map());
 				const sequence = React.useRef(0);
 				sessionsRef.current = sessions;
@@ -673,12 +736,12 @@ window.__ModuleLoader__.load({
 					timers.current.set(key, timer);
 				}, [dismiss, toastLifetimeMs]);
 
-				/** Append one notice, dropping an older notice for the same Session. */
-				const pushToast = React.useCallback((sessionId) => {
+				/** Append one notice of a kind, dropping an older notice of the same kind. */
+				const pushToast = React.useCallback((sessionId, kind = 'done') => {
 					setToasts((current) => {
 						sequence.current += 1;
-						const entry = { key: `${sessionId ?? 'test'}:${sequence.current}`, sessionId };
-						const kept = current.filter((toast) => toast.sessionId !== sessionId);
+						const entry = { key: `${sessionId ?? 'test'}:${kind}:${sequence.current}`, sessionId, kind };
+						const kept = current.filter((toast) => toast.sessionId !== sessionId || toast.kind !== kind);
 						kept.push(entry);
 						return kept.slice(-MAX_TOASTS);
 					});
@@ -715,22 +778,53 @@ window.__ModuleLoader__.load({
 							const isMainView = ((row.retainedBy?.mainView ?? 0) > 0);
 							if (isMainView && !inactive && !notifyWhenFocused) continue;
 						}
-						pushToast(sessionId);
-						if (systemNotifications) fireSystemNotice(sessionId, tr);
+						if (notifyInApp) pushToast(sessionId, 'done');
+						if (systemNotifications) fireSystemNotice(sessionId, tr, { kind: 'done' });
 					}
-				}, [status, pushToast, tr, notifyWhenFocused, systemNotifications, notifySubagents]);
+				}, [status, pushToast, tr, notifyInApp, notifyWhenFocused, systemNotifications, notifySubagents]);
+
+				/**
+				 * Notify when a Session starts waiting for the user's choice,
+				 * confirmation or approval (`pendingInteraction` in the same status
+				 * source). The same interaction object stays pending across status
+				 * republishes, so only a new one announces again.
+				 */
+				React.useEffect(() => {
+					if (!(status instanceof Map)) return;
+					const previous = previousPending.current;
+					const next = new Map();
+					const waiting = [];
+					for (const [sessionId, state] of status) {
+						const pending = state?.pendingInteraction;
+						next.set(sessionId, pending);
+						if (pending !== undefined && pending !== null && previous.get(sessionId) !== pending) {
+							waiting.push(sessionId);
+						}
+					}
+					previousPending.current = next;
+					if (waiting.length === 0) return;
+					const list = sessionsRef.current;
+					for (const sessionId of waiting) {
+						const row = list?.byId?.[sessionId];
+						if (row !== undefined && !notifySubagents
+							&& (row.origin === 'subagent' || row.parentSessionId !== undefined)) continue;
+						if (!notifyWhenNeedsInput) continue;
+						if (notifyInApp) pushToast(sessionId, 'question');
+						if (systemNotifications) fireSystemNotice(sessionId, tr, { kind: 'question' });
+					}
+				}, [status, pushToast, tr, notifyInApp, systemNotifications, notifyWhenNeedsInput, notifySubagents]);
 
 				/* The Settings page's test button asks the running notifier to speak. */
 				React.useEffect(() => {
 					const handle = () => {
-						pushToast(null);
-						if (systemNotifications) fireSystemNotice(null, tr, { preview: true });
+						if (notifyInApp) pushToast(null, 'test');
+						if (systemNotifications) fireSystemNotice(null, tr, { kind: 'test' });
 					};
 					previewListeners.add(handle);
 					return () => {
 						previewListeners.delete(handle);
 					};
-				}, [pushToast, tr, systemNotifications]);
+				}, [pushToast, tr, notifyInApp, systemNotifications]);
 
 				/* Keep one dismiss timer per live notice; drop timers of removed ones. */
 				React.useEffect(() => {
@@ -766,12 +860,14 @@ window.__ModuleLoader__.load({
 				React.useEffect(() => () => {
 					for (const timer of timers.current.values()) window.clearTimeout(timer);
 					timers.current.clear();
+					liveNotices.clear();
 				}, []);
 
 				if (toasts.length === 0) return null;
 
 				const toastNodes = toasts.map((toast) => {
-					const preview = toast.sessionId === null;
+					const preview = toast.kind === 'test';
+					const question = toast.kind === 'question';
 					const pause = () => {
 						const timer = timers.current.get(toast.key);
 						if (timer !== undefined) {
@@ -786,8 +882,10 @@ window.__ModuleLoader__.load({
 						dismiss(toast.key);
 						if (!preview) openSession(toast.sessionId);
 					};
-					const title = preview ? tr('toast.testTitle') : tr('title');
-					const body = preview ? tr('toast.testBody') : tr('body', { id: shortSessionId(toast.sessionId) });
+					const title = preview ? tr('toast.testTitle') : question ? tr('toast.questionTitle') : tr('title');
+					const body = preview
+						? tr('toast.testBody')
+						: tr(question ? 'toast.questionBody' : 'body', { id: shortSessionId(toast.sessionId) });
 					return h(
 						'div',
 						{
@@ -1029,9 +1127,12 @@ window.__ModuleLoader__.load({
 					);
 				}
 
+				const channelsEnabled = values.notifyInApp === true || values.systemNotifications === true;
 				const preferenceRows = [
-					switchRow('notifyWhenFocused', tr('row.focused.title'), tr('row.focused.description')),
+					switchRow('notifyInApp', tr('row.inapp.title'), tr('row.inapp.description')),
 					switchRow('systemNotifications', tr('row.system.title'), tr('row.system.description')),
+					switchRow('notifyWhenNeedsInput', tr('row.needsInput.title'), tr('row.needsInput.description')),
+					switchRow('notifyWhenFocused', tr('row.focused.title'), tr('row.focused.description')),
 					switchRow('notifySubagents', tr('row.subagent.title'), tr('row.subagent.description')),
 					renderRow(
 						{
@@ -1054,13 +1155,14 @@ window.__ModuleLoader__.load({
 						{
 							key: 'test',
 							title: tr('row.test.title'),
-							description: tr('row.test.description'),
+							description: channelsEnabled ? tr('row.test.description') : tr('row.test.disabled'),
 						},
 						h(
 							'button',
 							{
 								type: 'button',
 								className: 'dshDoneNotify_button',
+								disabled: !channelsEnabled,
 								onClick: () => requestTestNotice(),
 							},
 							tr('row.test.action'),

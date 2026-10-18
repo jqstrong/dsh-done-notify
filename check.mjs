@@ -29,8 +29,10 @@ const localeEn = JSON.parse(readFileSync(new URL('./locale/en.json', import.meta
 const localeZh = JSON.parse(readFileSync(new URL('./locale/zh.json', import.meta.url), 'utf8'));
 
 const DEFAULT_SETTINGS = {
-	notifyWhenFocused: true,
+	notifyInApp: true,
 	systemNotifications: true,
+	notifyWhenNeedsInput: true,
+	notifyWhenFocused: true,
 	notifySubagents: false,
 	toastLifetimeSeconds: 12,
 };
@@ -468,12 +470,13 @@ function sessionRow(id, options = {}) {
 		running: options.running === true,
 		retainedBy: options.mainView === true ? { mainView: 1 } : {},
 		...(options.subagent === true ? { origin: 'subagent', parentSessionId: 'session-parent' } : {}),
+		...(options.pending !== undefined ? { pendingInteraction: options.pending } : {}),
 	};
 }
 
 function statusOf(rows) {
 	const map = new SandboxMap();
-	for (const row of rows) map.set(row.id, { running: row.running, pendingInteraction: undefined, completionUnread: false });
+	for (const row of rows) map.set(row.id, { running: row.running, pendingInteraction: row.pendingInteraction, completionUnread: false });
 	return map;
 }
 
@@ -593,15 +596,15 @@ function publishStatus(instance, rows, sessionList = listOf(rows)) {
 	page.render();
 	const text = textOf(page.tree);
 	assert.ok(text.includes('正在读取设置…'), 'loading note before the settings document arrives');
-	assert.ok(text.includes('当前会话完成时也提示'), 'switches are rendered while loading');
+	assert.ok(text.includes('页面内提示卡片'), 'switches are rendered while loading');
 	const switches = findAll(page.tree, (node) => node.props?.role === 'switch');
-	assert.equal(switches.length, 3, 'three switches');
+	assert.equal(switches.length, 5, 'five switches');
 	assert.equal(switches.every((node) => node.props.disabled === true), true, 'switches are disabled until ready');
 	const intro = findAll(page.tree, byClass('dshDoneNotify_intro')).map(textOf)[0] ?? '';
 	assert.ok(intro.includes('配置档案'), 'intro explains where the settings live');
 	const rowsWrap = findAll(page.tree, byClass('dshDoneNotify_rows'))[0];
 	assert.ok(rowsWrap !== undefined, 'preference rows are grouped under one wrapper');
-	assert.equal(findAll(page.tree, byClass('dshDoneNotify_row')).length, 6, 'six preference rows');
+	assert.equal(findAll(page.tree, byClass('dshDoneNotify_row')).length, 8, 'eight preference rows');
 	page.render();
 	/* Loading note is a status region for assistive tech. */
 	const note = findAll(page.tree, byClass('dshDoneNotify_note'))[0];
@@ -837,6 +840,82 @@ publishConfig({});
 	assert.equal(toastsOf(assistant.tree).length, 0, 'close removes the notice');
 }
 
+/* 9b. A pending choice is announced once per interaction. */
+{
+	resetWorld();
+	const assistant = createNotifierInstance();
+	const firstChoice = { kind: 'ask', sessionId: 's-ask' };
+	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: firstChoice })]);
+	assistant.render();
+	assert.equal(toastsOf(assistant.tree).length, 1, 'toast for the waiting choice');
+	assert.deepEqual(titlesOf(assistant.tree), ['需要你的选择'], 'choice toast title');
+	assert.deepEqual(bodiesOf(assistant.tree), ['会话 s-ask 正在等待你的选择，点击打开'], 'choice toast body');
+	assert.equal(FakeNotification.instances.length, 1, 'desktop notice for the waiting choice');
+	assert.equal(FakeNotification.instances[0].title, 'DSH · 需要你的选择');
+	assertWebNotice(FakeNotification.instances[0], 'choice notice');
+
+	/* The same interaction object across status republishes must not duplicate. */
+	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: firstChoice })]);
+	assistant.render();
+	assert.equal(FakeNotification.instances.length, 1, 'same pending choice is not re-announced');
+
+	/* A resolved choice followed by a new one announces again. */
+	publishStatus(assistant, [sessionRow('s-ask', { running: true })]);
+	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: { kind: 'ask', n: 2 } })]);
+	assistant.render();
+	assert.equal(FakeNotification.instances.length, 2, 'a new pending choice is announced');
+	assert.equal(toastsOf(assistant.tree).length, 1, 'the newer choice toast replaces the older one');
+
+	/* Subagent choices follow notifySubagents like completion notices do. */
+	publishStatus(assistant, [sessionRow('s-child', { running: true, subagent: true, pending: { kind: 'ask' } })]);
+	assistant.render();
+	assert.equal(FakeNotification.instances.length, 2, 'subagent choice is filtered by default');
+
+	publishConfig({ notifyWhenNeedsInput: false });
+	publishStatus(assistant, [sessionRow('s-ask', { running: true, pending: { kind: 'ask', n: 3 } })]);
+	assistant.render();
+	assert.equal(FakeNotification.instances.length, 2, 'notifyWhenNeedsInput=false suppresses choice notices');
+	publishConfig({});
+}
+
+/* 9c. The two notification channels can be selected independently. */
+{
+	resetWorld();
+	publishConfig({ notifyInApp: false });
+	const osOnly = createNotifierInstance();
+	publishStatus(osOnly, [sessionRow('s-os', { running: true })]);
+	publishStatus(osOnly, [sessionRow('s-os')]);
+	osOnly.render();
+	assert.equal(toastsOf(osOnly.tree).length, 0, 'in-page card disabled');
+	assert.equal(FakeNotification.instances.length, 1, 'desktop notice still raised');
+
+	publishConfig({ notifyInApp: true, systemNotifications: false });
+	resetWorld();
+	const cardOnly = createNotifierInstance();
+	publishStatus(cardOnly, [sessionRow('s-card', { running: true })]);
+	publishStatus(cardOnly, [sessionRow('s-card')]);
+	cardOnly.render();
+	assert.equal(toastsOf(cardOnly.tree).length, 1, 'in-page card shown');
+	assert.equal(FakeNotification.instances.length, 0, 'desktop notice disabled');
+	publishConfig({});
+	resetWorld();
+}
+
+/* 9d. A retained notification keeps its click handler and opens the Session. */
+{
+	resetWorld();
+	const assistant = createNotifierInstance();
+	publishStatus(assistant, [sessionRow('s-note', { running: true })]);
+	publishStatus(assistant, [sessionRow('s-note')]);
+	assistant.render();
+	const notice = FakeNotification.instances[0];
+	advance(120000);
+	openSessions.length = 0;
+	notice.onclick();
+	assert.deepEqual(openSessions, ['s-note'], 'notification click opens the Session');
+	assert.equal(windowStub.focused, 1, 'notification click focuses the window');
+}
+
 /* 13. Serving the namespace makes the page ready and shows the values. */
 {
 	configForms.serve('done-notify', { ...DEFAULT_SETTINGS });
@@ -847,7 +926,11 @@ publishConfig({});
 	assert.ok(text.includes('修改会立即生效。'), 'ready note');
 	assert.ok(text.includes('已授权'), 'permission row reports the granted state');
 	const switches = findAll(page.tree, (node) => node.props?.role === 'switch');
-	assert.deepEqual(switches.map((node) => node.props['aria-checked']), [true, true, false], 'switch states follow the values');
+	assert.deepEqual(
+		switches.map((node) => node.props['aria-checked']),
+		[true, true, true, true, false],
+		'switch states follow the values',
+	);
 	const segments = findAll(page.tree, byClass('dshDoneNotify_segment'));
 	assert.deepEqual(segments.map(textOf), ['6 秒', '12 秒', '20 秒', '30 秒'], 'lifetime presets');
 	assert.deepEqual(segments.map((node) => node.props['aria-pressed']), [false, true, false, false], 'current lifetime selected');
@@ -894,8 +977,8 @@ publishConfig({});
 	assert.equal(configForms.writes.length, before + 1, 'one Host write queued');
 	assert.deepEqual(
 		{ field: configForms.writes.at(-1).field, value: configForms.writes.at(-1).value },
-		{ field: 'notifyWhenFocused', value: false },
-		'notifyWhenFocused written as false',
+		{ field: 'notifyInApp', value: false },
+		'notifyInApp written as false',
 	);
 	assert.equal(findAll(page.tree, (node) => node.props?.role === 'switch')[0].props['aria-checked'], false, 'switch reflects the new value');
 
@@ -910,12 +993,13 @@ publishConfig({});
 	);
 	assert.equal(notesOf(page.tree)[0], '修改会立即生效。');
 
-	/* The notifier reads the same store: visible finishes go quiet now. */
+	/* The notifier reads the same store: the page card channel is now off. */
 	const assistant = createNotifierInstance();
 	publishStatus(assistant, [sessionRow('s-main', { running: true, mainView: true })]);
 	publishStatus(assistant, [sessionRow('s-main', { mainView: true })]);
 	assistant.render();
-	assert.equal(toastsOf(assistant.tree).length, 0, 'notifier applies the new notifyWhenFocused value immediately');
+	assert.equal(toastsOf(assistant.tree).length, 0, 'notifier applies the new notifyInApp value immediately');
+	assert.equal(FakeNotification.instances.length, 1, 'desktop notification channel still active');
 
 	publishConfig({});
 	page.render();
@@ -960,6 +1044,10 @@ publishConfig({});
 	openSessions.length = 0;
 	toastsOf(assistant.tree)[0].props.onClick();
 	assert.deepEqual(openSessions, [], 'test notice click does not try to open a Session');
+	windowStub.focused = 0;
+	FakeNotification.instances[0].onclick();
+	assert.deepEqual(openSessions, [], 'test notification click does not open a Session');
+	assert.equal(windowStub.focused, 1, 'test notification click focuses the window');
 }
 
 /* 17. Permission states shown by the page. */
@@ -1045,8 +1133,15 @@ publishConfig({});
 	assert.equal(localeEn.meta.title, 'Run Finished Notifications');
 	assert.equal(localeZh.meta.title, '运行完成通知');
 	assert.ok(localeZh.meta.description.includes('系统通知'));
-	/* The Host half serves the four volatile preferences as a settings form. */
-	for (const field of ['notifyWhenFocused', 'systemNotifications', 'notifySubagents', 'toastLifetimeSeconds']) {
+	/* The Host half serves the six volatile preferences as a settings form. */
+	for (const field of [
+		'notifyInApp',
+		'systemNotifications',
+		'notifyWhenNeedsInput',
+		'notifyWhenFocused',
+		'notifySubagents',
+		'toastLifetimeSeconds',
+	]) {
 		assert.ok(hostSource.includes(field), `Host Config declares ${field}`);
 	}
 	assert.ok(hostSource.includes('.volatile()'), 'every Host preference is volatile (live-editable)');
