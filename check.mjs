@@ -163,10 +163,15 @@ const documentListeners = [];
 const windowListeners = [];
 const styleTags = [];
 
+const appendedBodyNodes = [];
 const documentStub = {
 	hidden: false,
 	hasFocus: () => true,
-	body: {},
+	body: {
+		appendChild: (node) => {
+			appendedBodyNodes.push(node);
+		},
+	},
 	head: {
 		appendChild: (tag) => {
 			styleTags.push(tag);
@@ -175,10 +180,14 @@ const documentStub = {
 	createElement: () => {
 		const tag = {
 			dataset: {},
+			style: {},
 			textContent: '',
+			src: '',
 			removed: false,
 			remove() {
 				tag.removed = true;
+				const index = appendedBodyNodes.indexOf(tag);
+				if (index >= 0) appendedBodyNodes.splice(index, 1);
 			},
 		};
 		return tag;
@@ -831,15 +840,11 @@ publishConfig({});
 	assert.equal(prevented, true, 'Enter is consumed');
 	assert.deepEqual(openSessions, ['s-open', 's-key'], 'keyboard activation opens the Session');
 
-	publishStatus(assistant, [sessionRow('s-close', { running: true })]);
-	publishStatus(assistant, [sessionRow('s-close')]);
+	publishStatus(assistant, [sessionRow('s-no-close', { running: true })]);
+	publishStatus(assistant, [sessionRow('s-no-close')]);
 	assistant.render();
-	const close = findAll(assistant.tree, byClass('dshDoneNotify_close'))[0];
-	let stopped = false;
-	close.props.onClick({ stopPropagation: () => { stopped = true; } });
-	assert.equal(stopped, true, 'close stops the toast click');
-	assistant.render();
-	assert.equal(toastsOf(assistant.tree).length, 0, 'close removes the notice');
+	assert.equal(toastsOf(assistant.tree).length, 1, 'notice shown');
+	assert.equal(findAll(assistant.tree, byClass('dshDoneNotify_close')).length, 0, 'cards carry no close button');
 }
 
 /* 9b. A pending choice is announced once per interaction. */
@@ -938,6 +943,33 @@ publishConfig({});
 	setWindowState({ hidden: false, focused: true });
 	for (const entry of documentListeners.filter((item) => item.type === 'visibilitychange')) entry.listener();
 	assert.deepEqual(openSessions, ['s-return'], 'returning to the window opens the notified Session');
+}
+
+/* 9f. Clicking a toast while the window is away asks the shell to activate its window. */
+{
+	resetWorld();
+	const assistant = createNotifierInstance();
+	publishStatus(assistant, [sessionRow('s-activate', { running: true })]);
+	setWindowState({ hidden: true, focused: false });
+	publishStatus(assistant, [sessionRow('s-activate')]);
+	assistant.render();
+	const notice = FakeNotification.instances[0];
+	appendedBodyNodes.length = 0;
+	openSessions.length = 0;
+	notice.onclick();
+	assert.deepEqual(openSessions, ['s-activate'], 'click opens the Session');
+	advance(200);
+	const frames = appendedBodyNodes.filter((node) => node.src === 'dsh://open');
+	assert.equal(frames.length, 1, 'the shell is asked to activate its window through the dsh protocol');
+	advance(2000);
+	assert.equal(appendedBodyNodes.length, 0, 'the activation frame is cleaned up');
+
+	/* The settings page records the delivered click for troubleshooting. */
+	const page = createPageInstance();
+	page.render();
+	const diagText = findAll(page.tree, byClass('dshDoneNotify_diag')).map(textOf)[0] ?? '';
+	assert.ok(diagText.includes('最近系统通知：'), 'settings page records notice creation');
+	assert.ok(/最近点击：\d/u.test(diagText.replace(/\u202f|\u00a0/gu, ' ')) || diagText.includes('最近点击：'), 'settings page records the click');
 }
 
 /* 13. Serving the namespace makes the page ready and shows the values. */

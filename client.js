@@ -70,7 +70,6 @@ window.__ModuleLoader__.load({
 			'toast.questionBody': '会话 {id} 正在等待你的选择，点击打开',
 			systemQuestionTitle: 'DSH · 需要你的选择',
 			systemQuestionBody: '会话 {id} 正在等待你的选择，点击打开',
-			close: '关闭通知',
 			region: '完成通知',
 			'toast.testTitle': '这是一条测试提示',
 			'toast.testBody': '若看到此卡片，说明提示工作正常。',
@@ -108,6 +107,9 @@ window.__ModuleLoader__.load({
 			'row.test.action': '发送测试',
 			'row.test.disabled': '已关闭所有通知方式，打开至少一个才能测试',
 			'row.state.saving': '保存中…',
+			'diag.notice': '最近系统通知：{time}',
+			'diag.click': '最近点击：{time}',
+			'diag.never': '尚未收到',
 		};
 
 		const en = {
@@ -119,7 +121,6 @@ window.__ModuleLoader__.load({
 			'toast.questionBody': 'Session {id} is waiting for your choice — click to open',
 			systemQuestionTitle: 'DSH · Waiting for your choice',
 			systemQuestionBody: 'Session {id} is waiting for your choice — click to open',
-			close: 'Dismiss notification',
 			region: 'Completion notices',
 			'toast.testTitle': 'Test notification',
 			'toast.testBody': 'If you can see this card, notices work.',
@@ -157,6 +158,9 @@ window.__ModuleLoader__.load({
 			'row.test.action': 'Send test',
 			'row.test.disabled': 'All channels are off; enable at least one to test',
 			'row.state.saving': 'Saving…',
+			'diag.notice': 'Last system notice: {time}',
+			'diag.click': 'Last click: {time}',
+			'diag.never': 'not yet',
 		};
 
 		/* ---------------------------------------------------------------- style */
@@ -185,11 +189,6 @@ window.__ModuleLoader__.load({
 			'color:var(--dsw-alias-label-primary);overflow-wrap:anywhere}',
 			'.dshDoneNotify_body{margin-top:2px;font-size:12px;line-height:18px;',
 			'color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}',
-			'.dshDoneNotify_close{flex:none;inline-size:22px;block-size:22px;padding:0;margin:-2px -2px 0 0;',
-			'display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;',
-			'background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
-			'.dshDoneNotify_close:hover{background:var(--dsw-alias-bg-layer-2,#eef2f7)}',
-			'.dshDoneNotify_close svg{inline-size:12px;block-size:12px}',
 			'@keyframes dshDoneNotify_in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
 			'@media (width<=560px){.dshDoneNotify_stack{inset-inline:12px;bottom:12px;width:auto}}',
 			'@media (prefers-reduced-motion:reduce){.dshDoneNotify_toast{animation:none}}',
@@ -215,6 +214,7 @@ window.__ModuleLoader__.load({
 			'.dshDoneNotify_dotOk{background:var(--dsw-alias-state-success-primary,#16a34a)}',
 			'.dshDoneNotify_dotBad{background:var(--dsw-alias-state-error-primary,#dc2626)}',
 			'.dshDoneNotify_note{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;padding:8px 0 0}',
+			'.dshDoneNotify_diag{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;padding:4px 0 0}',
 			/* Switch: the shipped 36x20 control, renamed and token-based. */
 			'.dshDoneNotify_switch{box-sizing:border-box;position:relative;flex:0 0 auto;width:36px;height:20px;',
 			'padding:2px;border:0;border-radius:999px;background:var(--dsw-alias-border-l3,#cbd5e1);',
@@ -325,8 +325,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/** Ask for the permission and resolve the resulting state. */
-		function requestPermission() {
-			try {
+		function requestPermission() {			try {
 				const Ctor = typeof window === 'undefined' ? undefined : window.Notification;
 				if (typeof Ctor !== 'function' || typeof Ctor.requestPermission !== 'function') return Promise.resolve(readPermission());
 				const result = Ctor.requestPermission();
@@ -356,20 +355,74 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		/** The dismiss glyph. */
-		function closeIcon() {
-			return h(
-				'svg',
-				{ viewBox: '0 0 12 12', width: 12, height: 12, 'aria-hidden': true, focusable: 'false' },
-				h('path', {
-					fill: 'none',
-					stroke: 'currentColor',
-					'stroke-width': 1.6,
-					'stroke-linecap': 'round',
-					d: 'M2.5 2.5l7 7M9.5 2.5l-7 7',
-				}),
-			);
+		/**
+		 * Ask the desktop shell to bring its window to the front. The shell
+		 * registers the `dsh` protocol and treats a later launch as "focus the
+		 * primary window" (restoring it when minimized); a hidden iframe
+		 * navigation is the only protocol-launch path a sandboxed page has, since
+		 * the shell denies `window.open` and blocks top-level navigation away from
+		 * the application document.
+		 */
+		function requestWindowActivation() {
+			try {
+				if (typeof document === 'undefined' || document.body === null || document.body === undefined) return;
+				const frame = document.createElement('iframe');
+				frame.style.display = 'none';
+				frame.src = 'dsh://open';
+				document.body.appendChild(frame);
+				window.setTimeout(() => {
+					try {
+						frame.remove();
+					}
+					catch (_error) {
+						/* Already detached. */
+					}
+				}, 1500);
+			}
+			catch (_error) {
+				/* Window activation is best-effort; the Session still opens. */
+			}
 		}
+
+		/* --------------------------------------------------------- diagnostics bus */
+
+		/**
+		 * Reactive record of the last system notice and the last notification
+		 * click, shown in the Settings page. It distinguishes "Electron never
+		 * delivered the click" from "the click arrived but the window did not come
+		 * forward" while debugging this desktop shell.
+		 */
+		function createDiagnostics() {
+			let snapshot = Object.freeze({ noticeAt: null, clickAt: null });
+			const listeners = new Set();
+			const publish = (next) => {
+				snapshot = Object.freeze(next);
+				for (const listener of [...listeners]) {
+					try {
+						listener();
+					}
+					catch (_error) {
+						/* A listener failure must not break notification handling. */
+					}
+				}
+			};
+			return {
+				getSnapshot: () => snapshot,
+				subscribe: (listener) => {
+					listeners.add(listener);
+					return () => {
+						listeners.delete(listener);
+					};
+				},
+				recordNotice() {
+					publish({ ...snapshot, noticeAt: Date.now() });
+				},
+				recordClick() {
+					publish({ ...snapshot, clickAt: Date.now() });
+				},
+			};
+		}
+		const diagnostics = createDiagnostics();
 
 		/* ------------------------------------------------------- test-notice bus */
 
@@ -697,11 +750,13 @@ window.__ModuleLoader__.load({
 					});
 					/* Keep the object alive: a collected Notification drops its click handler. */
 					retainNotice(tag, notice);
+					diagnostics.recordNotice();
 					if (kind === 'question') questionNotices.set(sessionId, notice);
 					if (inactive && kind !== 'test' && typeof sessionId === 'string') {
 						pendingReturn = { sessionId, at: Date.now() };
 					}
 					notice.onclick = () => {
+						diagnostics.recordClick();
 						releaseNotice(tag);
 						if (kind === 'question') questionNotices.delete(sessionId);
 						pendingReturn = null;
@@ -715,9 +770,14 @@ window.__ModuleLoader__.load({
 						};
 						openSession(sessionId);
 						focusWindow();
-						/* One delayed retry helps shells that raise the window a tick late. */
+						/* A delayed retry raises the window a tick late; if the shell
+						 * still refuses focus (minimized or behind another app), ask it
+						 * to re-activate through its `dsh://open` protocol handler. */
 						try {
-							window.setTimeout(focusWindow, 60);
+							window.setTimeout(() => {
+								focusWindow();
+								if (!document.hasFocus()) requestWindowActivation();
+							}, 120);
 						}
 						catch (_error) {
 							/* Timers are best-effort here. */
@@ -988,19 +1048,6 @@ window.__ModuleLoader__.load({
 							h('div', { className: 'dshDoneNotify_title' }, title),
 							h('div', { className: 'dshDoneNotify_body' }, body),
 						),
-						h(
-							'button',
-							{
-								type: 'button',
-								className: 'dshDoneNotify_close',
-								'aria-label': tr('close'),
-								onClick: (event) => {
-									if (typeof event?.stopPropagation === 'function') event.stopPropagation();
-									dismiss(toast.key);
-								},
-							},
-							closeIcon(),
-						),
 					);
 				});
 
@@ -1070,7 +1117,9 @@ window.__ModuleLoader__.load({
 				const [pending, setPending] = React.useState(null);
 				const [failed, setFailed] = React.useState(null);
 				const [permission, setPermission] = React.useState(readPermission);
+				const [diagnostic, setDiagnostic] = React.useState(diagnostics.getSnapshot);
 				const alive = React.useRef(true);
+				React.useEffect(() => diagnostics.subscribe(() => setDiagnostic(diagnostics.getSnapshot())), []);
 				React.useEffect(() => () => {
 					alive.current = false;
 				}, []);
@@ -1266,6 +1315,17 @@ window.__ModuleLoader__.load({
 					h('p', { className: 'dshDoneNotify_intro' }, tr('settings.intro')),
 					h('div', { className: 'dshDoneNotify_rows' }, preferenceRows),
 					h('div', { className: 'dshDoneNotify_note', role: ready ? undefined : 'status' }, note),
+					h(
+						'div',
+						{ className: 'dshDoneNotify_diag' },
+						tr('diag.notice', {
+							time: diagnostic.noticeAt === null ? tr('diag.never') : new Date(diagnostic.noticeAt).toLocaleTimeString(),
+						}),
+						' · ',
+						tr('diag.click', {
+							time: diagnostic.clickAt === null ? tr('diag.never') : new Date(diagnostic.clickAt).toLocaleTimeString(),
+						}),
+					),
 				);
 			};
 		}
