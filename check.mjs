@@ -610,7 +610,8 @@ publishConfig({});
 	assert.equal(toastsOf(assistant.tree).length, 1, 'one toast after the idle transition');
 	assert.deepEqual(titlesOf(assistant.tree), ['对话已完成'], 'localized toast title');
 	assert.deepEqual(bodiesOf(assistant.tree), ['会话 -alpha 已结束运行，点击打开'], 'body names the session tail');
-	assert.equal(FakeNotification.instances.length, 0, 'no OS notice while the window is focused');
+	assert.equal(FakeNotification.instances.length, 1, 'OS notice is raised even while the window is focused');
+	assert.equal(FakeNotification.instances[0].title, 'DSH · 对话已完成');
 	assert.equal(assistant.tree.props['aria-live'], 'polite');
 }
 
@@ -623,6 +624,7 @@ publishConfig({});
 	assistant.render();
 	assert.deepEqual(titlesOf(assistant.tree), ['Run finished'], 'English toast title');
 	assert.deepEqual(bodiesOf(assistant.tree), ['Session -alpha finished running — click to open'], 'English toast body');
+	assert.deepEqual(FakeNotification.instances.map((notice) => notice.title), ['DSH · Run finished'], 'English OS notice title');
 }
 
 /* 2. The on-screen conversation finishing also notifies by default. */
@@ -633,7 +635,7 @@ publishConfig({});
 	publishStatus(assistant, [sessionRow('s-main', { mainView: true })]);
 	assistant.render();
 	assert.equal(toastsOf(assistant.tree).length, 1, 'in-app toast for the visible conversation');
-	assert.equal(FakeNotification.instances.length, 0, 'still no OS notice while focused');
+	assert.equal(FakeNotification.instances.length, 1, 'OS notice for the visible conversation too');
 }
 
 /* 3. notifyWhenFocused=false keeps the visible conversation quiet. */
@@ -649,6 +651,7 @@ publishConfig({});
 	publishStatus(assistant, [sessionRow('s-back')]);
 	assistant.render();
 	assert.equal(toastsOf(assistant.tree).length, 1, 'background conversations still notify');
+	assert.equal(FakeNotification.instances.length, 1, 'background completion raises an OS notice as well');
 	publishConfig({});
 }
 
@@ -704,11 +707,13 @@ publishConfig({});
 	publishStatus(assistant, [sessionRow('s-child', { subagent: true })]);
 	assistant.render();
 	assert.equal(toastsOf(assistant.tree).length, 0, 'subagent finish is not announced by default');
+	assert.equal(FakeNotification.instances.length, 0, 'no OS notice for a filtered subagent finish');
 	publishConfig({ notifySubagents: true });
 	publishStatus(assistant, [sessionRow('s-child2', { running: true, subagent: true })]);
 	publishStatus(assistant, [sessionRow('s-child2', { subagent: true })]);
 	assistant.render();
 	assert.equal(toastsOf(assistant.tree).length, 1, 'subagent finish is announced when switched on');
+	assert.equal(FakeNotification.instances.length, 1, 'subagent completion raises an OS notice when switched on');
 	publishConfig({});
 }
 
@@ -726,6 +731,7 @@ publishConfig({});
 		['tack-2', 'tack-3', 'tack-4', 'tack-5'].map((tail) => `会话 ${tail} 已结束运行，点击打开`),
 		'oldest notices were dropped',
 	);
+	assert.equal(FakeNotification.instances.length, 6, 'each finished Session is announced in the OS notification center');
 }
 
 /* 8. Notice lifetime follows the configured seconds. */

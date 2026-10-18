@@ -83,7 +83,7 @@ window.__ModuleLoader__.load({
 			'row.focused.title': '当前会话完成时也提示',
 			'row.focused.description': '关闭后只有后台会话跑完才提示；你正在看的会话结束时不再弹卡片。',
 			'row.system.title': '系统通知',
-			'row.system.description': '窗口最小化或失焦时，运行结束会发送系统级通知（需要通知权限）。',
+			'row.system.description': '每次运行结束都发送系统级通知，无论窗口是否失焦（需要通知权限）。',
 			'row.subagent.title': '子代理会话也提示',
 			'row.subagent.description': '开启后，子代理（subagent）运行结束同样会提示；默认关闭以免打扰。',
 			'row.duration.title': '提示显示时长',
@@ -123,7 +123,7 @@ window.__ModuleLoader__.load({
 			'row.focused.title': 'Notify while the window is focused',
 			'row.focused.description': 'When off, only background conversations announce their finish.',
 			'row.system.title': 'System notifications',
-			'row.system.description': 'While the window is minimized or unfocused, send an OS-level notice when a run ends (requires notification permission).',
+			'row.system.description': 'Send an OS-level notification on every run end, whether or not the window is focused (requires notification permission).',
 			'row.subagent.title': 'Notify for subagent conversations',
 			'row.subagent.description': 'Also announce subagent runs. Off by default to avoid noise.',
 			'row.duration.title': 'Notice lifetime',
@@ -702,7 +702,7 @@ window.__ModuleLoader__.load({
 							if (isMainView && !inactive && !notifyWhenFocused) continue;
 						}
 						pushToast(sessionId);
-						if (inactive && systemNotifications) fireSystemNotice(sessionId, tr);
+						if (systemNotifications) fireSystemNotice(sessionId, tr);
 					}
 				}, [status, pushToast, tr, notifyWhenFocused, systemNotifications, notifySubagents]);
 
